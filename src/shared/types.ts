@@ -53,6 +53,26 @@ export interface SimDate {
   dayIndex: number; // days since epoch
 }
 
+/** Canonical save payload (shared so sim/ and persistence/ never import each other). */
+export interface SaveMeta {
+  tick: number;
+  accumulator: number;
+  speed: number;
+  rngSeed: number;
+  rngState: number;
+  balance: number;
+  worldSize: number;
+  worldSeed: number;
+}
+
+export interface SaveLayers {
+  terrain: Uint8Array;
+  /** Float32 height bytes (little-endian). */
+  height: Uint8Array;
+  zone: Uint8Array;
+  road: Uint8Array;
+}
+
 export interface SimSnapshot {
   tick: number;
   date: SimDate;
@@ -63,4 +83,68 @@ export interface SimSnapshot {
   paused: boolean;
   speed: number;
   counts: { roads: number; zonesR: number; zonesC: number; zonesI: number };
+}
+
+// ---- dependency-inversion contracts (module-boundaries §2) ----
+// view/ and ui/ program to these shared interfaces; main.ts injects the sim.
+// No runtime import of sim/ from view/, ui/, or persistence/ is allowed.
+
+export const CHUNK = 16;
+export const DIRTY_NONE = 0;
+export const DIRTY_ROADS = 1;
+export const DIRTY_ZONES = 2;
+export const DIRTY_ALL = DIRTY_ROADS | DIRTY_ZONES;
+
+export interface RoadPlan {
+  path: TilePos[];
+  newTiles: TilePos[];
+  cost: number;
+}
+
+export interface ZonePlan {
+  tiles: TilePos[];
+  skipped: number;
+  cost: number;
+}
+
+export interface BulldozePlan {
+  tiles: TilePos[];
+  roadTiles: number;
+  zoneTiles: number;
+  cost: number;
+}
+
+/** Structural read view of the world (implemented by sim.World). */
+export interface WorldView {
+  readonly size: number;
+  readonly mapMeters: number;
+  readonly terrain: Uint8Array;
+  readonly height: Float32Array;
+  readonly zone: Uint8Array;
+  readonly road: Uint8Array;
+  readonly roadMask: Uint8Array;
+  readonly chunkDirty: Uint8Array;
+  idx(x: number, y: number): number;
+  inBounds(x: number, y: number): boolean;
+  tileCenterWorld(x: number, y: number): { x: number; z: number };
+  groundHeightAt(wx: number, wz: number): number;
+  /** Null when buildable, else the player-facing reason. */
+  buildBlockReason(x: number, y: number): string | null;
+  slopeAt(x: number, y: number): number;
+}
+
+/** Command execution + validation entry points (implemented by main.ts over Sim). */
+export interface CommandHost {
+  readonly world: WorldView;
+  execute(cmd: Command): CommandResult;
+  validateRoad(path: TilePos[]): CommandResult & { plan?: RoadPlan };
+  validateZone(rect: TileRect): CommandResult & { plan?: ZonePlan };
+  validateBulldoze(rect: TileRect): CommandResult & { plan?: BulldozePlan };
+}
+
+/** Save encoders read through this (implemented by sim.Sim). */
+export interface SaveSource {
+  snapshot(): SimSnapshot;
+  getSaveMeta(): SaveMeta;
+  getSaveLayers(): SaveLayers;
 }

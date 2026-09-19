@@ -25,7 +25,7 @@ const ALLOWED = {
   'ui/react': new Set(['shared', 'ui/plain']),
   persistence: new Set(['shared', 'workers']),
   testing: new Set(['shared', 'sim', 'persistence']),
-  main: new Set(['shared', 'sim', 'workers', 'view', 'ui', 'persistence', 'testing']),
+  main: new Set(['shared', 'sim', 'workers', 'view', 'ui/plain', 'ui/react', 'persistence', 'testing']),
 };
 
 function submoduleOf(relPath) {
@@ -61,12 +61,17 @@ for (const file of walk(SRC)) {
   const from = submoduleOf(rel);
   // soft file-size cap (warn only)
   const text = readFileSync(file, 'utf8');
+  // `import type` is erased at compile time: no runtime coupling, always allowed
+  const code = text
+    .split('\n')
+    .filter((l) => !/^\s*import\s+type[\s{]/.test(l))
+    .join('\n');
   const lines = text.split('\n').length;
   if (lines > 300 && !rel.endsWith('.test.ts')) warnings.push(`${rel}: ${lines} lines (soft cap 300)`);
   if (from === null) continue;
   const allowed = ALLOWED[from] ?? new Set();
   const dir = join(SRC, rel.split(sep).slice(0, -1).join(sep));
-  for (const m of text.matchAll(/(?:from\s+|import\s*\()\s*['"]([^'"]+)['"]/g)) {
+  for (const m of code.matchAll(/(?:from\s+|import\s*\()\s*['"]([^'"]+)['"]/g)) {
     const target = targetModuleOfImport(dir, m[1]);
     if (target !== null && target !== from && !allowed.has(target)) {
       errors.push(`${rel} [${from}] imports ${m[1]} [${target}] — forbidden`);
@@ -74,7 +79,7 @@ for (const file of walk(SRC)) {
   }
   // testing/ may only be imported by tests, perf, e2e (checked: any non-test src import is an error)
   if (from !== 'testing') {
-    for (const m of text.matchAll(/(?:from\s+|import\s*\()\s*['"]([^'"]*testing[^'"]*)['"]/g)) {
+    for (const m of code.matchAll(/(?:from\s+|import\s*\()\s*['"]([^'"]*testing[^'"]*)['"]/g)) {
       errors.push(`${rel}: imports testing helper '${m[1]}' from non-test source`);
     }
   }

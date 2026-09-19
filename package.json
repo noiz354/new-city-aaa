@@ -10,12 +10,13 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "arch": "node scripts/arch-check.mjs",
+    "licenses": "node scripts/check-licenses.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "e2e": "playwright test",
     "perf": "vitest run perf/run.test.ts",
-    "ci": "npm run lint && npm run arch && npm run typecheck && npm run test && npm run build"
+    "ci": "npm run lint && npm run arch && npm run licenses && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "fflate": "0.8.3",

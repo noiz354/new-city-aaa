@@ -39,4 +39,5 @@ Plus: `three` importable only from `view/` (+ canvas mount); `react` only from `
 
 - D-B1: workers share *types* with sim, never code (avoids SAB/shared-memory coupling).
 - D-B2: uiStore is framework-agnostic (React replaceable).
+- D-B3 (VS-1): new module `src/testing/` (deterministic fixtures) may import `shared` + `sim` + `persistence`; importable only from `*.test.ts`, `perf/`, `e2e/`. `import type` is exempt from §2 (type-erased, no runtime coupling).
 - D-B3: tuning/ lives in sim but is data-only (hot-tunable, test-owned).

@@ -1,0 +1,138 @@
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #0b0e11;
+}
+#scene-container {
+  position: absolute;
+  inset: 0;
+}
+#scene-container canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+#ui-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font: 13px/1.4 system-ui, -apple-system, sans-serif;
+  color: #e6edf3;
+}
+#ui-root .panel {
+  pointer-events: auto;
+  background: rgba(13, 17, 23, 0.86);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+}
+#ui-root button {
+  font: inherit;
+  color: #e6edf3;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+#ui-root button:hover {
+  background: #30363d;
+}
+#ui-root button.on {
+  background: #1f6feb;
+  border-color: #1f6feb;
+}
+.topbar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 12px;
+  width: max-content;
+  max-width: calc(100vw - 20px);
+  flex-wrap: wrap;
+}
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.stat {
+  font-variant-numeric: tabular-nums;
+}
+.dim {
+  color: #8b949e;
+}
+.spacer {
+  width: 8px;
+}
+.seg {
+  display: flex;
+  gap: 2px;
+}
+.seg button {
+  padding: 4px 8px;
+}
+.toolbar {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+}
+.toolbar button {
+  text-align: left;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.kbd {
+  font-size: 11px;
+  color: #8b949e;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 0 5px;
+}
+.preview {
+  min-height: 36px;
+  font-size: 12px;
+  max-width: 170px;
+}
+.preview .note {
+  display: block;
+  color: #8b949e;
+}
+.inspector {
+  position: absolute;
+  right: 10px;
+  top: 64px;
+  width: 210px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.insp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.inspector .row {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+}
+.toast {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  font-weight: 600;
+}

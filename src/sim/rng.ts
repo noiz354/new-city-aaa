@@ -15,7 +15,7 @@ function hashSeed(seed: number): number {
 }
 
 export class Rng {
-  private readonly seed: number;
+  private seed: number;
   private state: number;
 
   constructor(seed: number, state?: number) {
@@ -47,6 +47,11 @@ export class Rng {
 
   getState(): RngState {
     return { seed: this.seed, state: this.state };
+  }
+
+  setState(s: RngState): void {
+    this.seed = s.seed >>> 0;
+    this.state = s.state >>> 0;
   }
 
   static dayStream(seed: number, stream: string, day: number): Rng {
