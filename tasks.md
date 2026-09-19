@@ -71,6 +71,18 @@
     tanpa browser + CDN Playwright ECONNRESET). Unblock: mesin/CI ber-browser.
 - [ ] **T-204 M — Road-access rule.** Tanpa path → ikon "No road connection", growth berhenti.
   `Deps: T-202` · `Accept: zona terisolasi tidak tumbuh + ikon tampil.` · `Evidence: screenshot.` · `Skills: city-builder-simulation-audit`
+  - **Status: PARTIAL (2026-09-19).** Rule kanonis (transportation §1: attachment Manhattan ≤2, T-401 upgrade
+    ke graph-edge) terimplementasi penuh: `src/sim/road-access.ts` (probe `isConnected`, flag harian inkremental
+    via `noteRect`, flip→event `road-access-changed`, `collectBlocked`), growth rewired (spawn/move-in/cancel
+    mid-build per design-doc §2), save-load recompute. 11 sim test hijau (radius 1/2/diagonal/3, blok permanen,
+    cancel saat road hilang, reconnect→move-in, dua jaringan independen, load-restore, determinisme hash);
+    perf dayP95 2.14ms direkondisikan → tetap ≤1.43ms (full-scan diganti inkremental ±2 setelah regression
+    budget tercatat). Ikon: `src/view/icons.ts` (InstancedMesh octahedron unlit, proyeksi murni: deltas +
+    `sync` pasca-load) + 5 unit test; Inspector menampilkan reason sim-owned; e2e `vs2a.spec.ts` siap.
+    Suite 101/101; lint/typecheck/build + arch bersih.
+  - **Remaining:** screenshot ikon di atas zona terisolasi (`npm run e2e` → `test-results/t204-no-road-icon.png`).
+    **Blocker: lingkungan** (sama dgn T-202/T-203: CDN Playwright + mirror apt diblokir, tanpa browser sistem;
+    playwright.config disinkronkan ke port 5180 dev aktual). Unblock: mesin/CI ber-browser.
 - [ ] **T-205 M — Upkeep tick.** Upkeep bulanan per bangunan; treasury berkurang terukur + unit test.
   `Deps: T-202` · `Accept: month tick mengubah $ benar.` · `Evidence: test log + HUD.` · `Skills: city-builder-simulation-audit, tdd`
 - [ ] **T-206 M — RCI demand v0.** Demand −100..+100 dari unemployment/happiness/tax; RCI bar HUD merespons.

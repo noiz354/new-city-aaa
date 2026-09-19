@@ -5,6 +5,7 @@ import { DIRTY_NONE, DIRTY_ROADS, DIRTY_ZONES, type WorldView } from '../shared/
 import { BuildingLayer } from './buildings.js';
 import { CameraRig } from './cameras.js';
 import { FpsOverlay } from './f3.js';
+import { BlockedIconLayer } from './icons.js';
 import { GhostLayer, HoverMarker } from './highlight.js';
 import { Picker, type PickResult } from './picking.js';
 import { RoadLayer } from './roads.js';
@@ -24,6 +25,7 @@ export class View {
   private zones: ZoneOverlay;
   private terrain: THREE.Mesh;
   private buildings: BuildingLayer;
+  private icons: BlockedIconLayer;
   private readonly f3: FpsOverlay;
 
   constructor(
@@ -43,6 +45,8 @@ export class View {
     this.sceneMgr.scene.add(this.zones.mesh);
     this.buildings = new BuildingLayer(world);
     this.sceneMgr.scene.add(this.buildings.group);
+    this.icons = new BlockedIconLayer(world);
+    this.sceneMgr.scene.add(this.icons.group);
     this.sceneMgr.scene.add(this.hover.group);
     world.chunkDirty.fill(DIRTY_NONE);
     this.ghost = new GhostLayer(this.sceneMgr.scene);
@@ -74,6 +78,9 @@ export class View {
     this.buildings.dispose();
     this.buildings = new BuildingLayer(world);
     this.sceneMgr.scene.add(this.buildings.group);
+    this.icons.dispose();
+    this.icons = new BlockedIconLayer(world);
+    this.sceneMgr.scene.add(this.icons.group);
     world.chunkDirty.fill(DIRTY_NONE);
   }
 
@@ -81,12 +88,18 @@ export class View {
   applyEvents(events: SimEvent[]): void {
     for (const e of events) {
       if (e.type === 'building-changed') this.buildings.apply(e);
+      else if (e.type === 'road-access-changed') this.icons.apply(e); // T-204 FR-C06
     }
   }
 
   /** Rebuild the building projection wholesale (boot + post-load full sync). */
   syncBuildings(slots: BuildingSlotData[]): void {
     this.buildings.sync(slots);
+  }
+
+  /** Rebuild blocked-attachment markers wholesale (boot + post-load full sync). */
+  syncIcons(blocked: TilePos[]): void {
+    this.icons.sync(blocked);
   }
 
   screenToTile(clientX: number, clientY: number): PickResult | null {
@@ -137,6 +150,7 @@ export class View {
     this.roads.dispose();
     this.zones.dispose();
     this.buildings.dispose();
+    this.icons.dispose();
     this.sceneMgr.dispose();
   }
 }

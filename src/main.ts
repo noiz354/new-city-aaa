@@ -69,6 +69,7 @@ async function boot(): Promise<void> {
     sim.loadState(dec.meta, dec.layers, dec.entities ?? undefined);
     view.setWorld(sim.world);
     view.syncBuildings(sim.buildings.serialize().slots);
+    view.syncIcons(sim.roadAccess.collectBlocked()); // T-204: post-load icon resync
     store.world = sim.world;
     store.set({ snapshot: sim.snapshot(), selectedTile: null });
     store.toast(`Loaded ${slot}${dec.repairs.length > 0 ? ` (${dec.repairs.length} repairs)` : ''}`);
@@ -90,6 +91,10 @@ async function boot(): Promise<void> {
       store.set({ projection: view.projection });
     },
     clearSelection: () => store.set({ selectedTile: null }),
+    // T-204 FR-C06: sim-owned blocking reason for the Inspector (growth.growthBlockReason
+    // probe; icon layer is the visual twin — both read the same attachment truth).
+    growthBlockReason: (x, y) => sim.growth.growthBlockReason(x, y),
+    roadAccessReason: () => sim.roadAccess.blockedReason(),
   };
 
   new ToolController(view.canvas, view, store, host, actions);

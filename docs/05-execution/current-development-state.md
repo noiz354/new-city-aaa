@@ -5,9 +5,9 @@
 > Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
 > Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
-- **Updated:** 2026-09-19 #4 (Asia/Jakarta)
-- **HEAD:** T-203 commit (see `git log`)
-- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202/T-203 🔶 partial — visual evidence blocked).
+- **Updated:** 2026-09-19 #5 (Asia/Jakarta)
+- **HEAD:** T-204 view+docs commit (see `git log`)
+- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202/T-203/T-204 🔶 partial — visual evidence blocked).
 
 ## Slice status
 
@@ -15,8 +15,28 @@
 |-------|-------|----------|
 | VS-0 Scaffold | ✅ DONE | `evidence/vs0-smoke.png`, CI green, `perf/baseline.json` |
 | VS-1 First tile | ✅ DONE | `evidence/vs1-{boot,built,loaded,persp,bay}.png`, 47 unit + 6 E2E green, coverage 86.6/72.5/82.5 |
-| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ · T-202 🔶 (78 suite) · T-203 🔶 (85/85 suite, 7 headless layer tests) |
+| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ · T-202 🔶 (78 suite) · T-203 🔶 (85/85) · T-204 🔶 (101/101 suite, 11 sim + 5 layer tests) |
 | VS-2b..VS-7 | ⬜ QUEUED | — |
+
+## T-204 notes (2026-09-19 #5)
+
+- Rule kanonis (transportation-and-pathfinding §1): attachment = ada road dalam radius **Manhattan ≤2** —
+  supersede adjacency-4 v0 (gap-analysis R-01). T-401 akan mengganti probe ke graph-edge tanpa mengubah kontrak.
+- `src/sim/road-access.ts`: `isConnected` pure probe; flag blocked = state TURUNAN (tanpa persist),
+  dihitung harian **inkremental** (dirty rect ±2 dari `noteRect` pada 3 jalur mutasi sim.execute) — full scan
+  65k tile pertama menyebabkan perf regression dayP95 2.14 > 1.43 (budget +10%) sehingga diganti; flip →
+  event `road-access-changed`; `recomputeForLoad` silent rebuild; `collectBlocked` untuk resync view.
+- Growth rewired: spawn + move-in gate pada `isConnected`; konstruksi organik pada lot terputus DIBATALKAN
+  pada pass harian (design-doc §2; tanpa payer → tanpa refund). Occupied tak menjadi abandoned karena kehilangan
+  road (§3.4 tidak memuat aturan road) — penduduk tetap, move-in menunggu koneksi ulang.
+- Ikon: `src/view/icons.ts` InstancedMesh octahedron merah unlit (MeshBasicMaterial — tanpa light tambahan,
+  sesuai batasan §9), proyeksi murni: deltas via drain, `sync` pasca-load; `view.ts`/`main.ts` wired.
+  Inspector: row `Growth blocked` = reason sim-owned (`growth.growthBlockReason` + `roadAccess.blockedReason`).
+- **Verifikasi:** suite 101/101 (road-access 11, icons 5) · lint 0 · typecheck 0 · arch OK · build pass ·
+  perf dayP95 ≤ budget setelah inkremental · determinisme hash load-equal. e2e `vs2a.spec.ts` siap;
+  playwright.config disinkronkan ke port dev aktual 5180.
+- **BLOCKED (lingkungan):** screenshot ikon — identik T-202/T-203 (tanpa browser; CDN/mirror diblokir).
+- Skills dipakai: `city-builder-simulation-audit` (rule kanonis §1), `three-best-practices` (instancing), `tdd`.
 
 ## T-203 notes (2026-09-19 #4)
 

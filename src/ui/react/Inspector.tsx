@@ -36,6 +36,12 @@ export function Inspector({
     ['Zone', ZONE_NAMES[world.zone[i] as number] ?? '?'],
     ['Road', (world.road[i] as number) === 1 ? 'yes' : 'no'],
   ];
+  // T-204 FR-C06 / VS-2a negative acceptance: a blocked lot shows the sim-owned reason.
+  if ((world.zone[i] as number) !== 0) {
+    const reason = actions.growthBlockReason(tile.x, tile.y);
+    if (reason === 'no-road-access') rows.push(['Growth blocked', actions.roadAccessReason()]);
+    else if (reason === 'no-demand') rows.push(['Growth blocked', 'No demand yet']);
+  }
   return (
     <div className="inspector panel">
       <div className=" insp-head">

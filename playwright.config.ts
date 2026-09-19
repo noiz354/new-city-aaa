@@ -4,10 +4,10 @@ export default defineConfig({
   testDir: 'e2e',
   timeout: 120_000,
   retries: 0,
-  use: { headless: true },
+  use: { headless: true, baseURL: 'http://localhost:5180' },
   webServer: {
     command: 'npm run dev',
-    port: 5173,
+    url: 'http://localhost:5180',
     reuseExistingServer: true,
     timeout: 90_000,
   },
