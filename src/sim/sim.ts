@@ -77,12 +77,20 @@ export class Sim {
     }
     // Economy stage AFTER growth (frozen order: … → growth → fields-commit → economy(monthly)).
     if (tick % TICKS_PER_MONTH === 0 && tick > 0) {
+      const income = this.economy.collectTax(this.buildings); // T-301 docs/02 §4
+      if (income > 0) this.economy.add(income);
       const bill = this.upkeep.onMonth();
-      if (bill.net !== 0) this.events.push({ type: 'treasury-changed', balance: this.economy.balance });
+      this.economy.recordMonth(income, bill.gross, bill.gross - bill.net); // history ring (T-301; feed T-303)
+      if (income > 0 || bill.net !== 0) {
+        this.events.push({ type: 'treasury-changed', balance: this.economy.balance });
+      }
     }
   }
 
   execute(cmd: Command): CommandResult {
+    // docs/02 §4 bankruptcy contract: below the limit only free commands may proceed
+    // (all current command kinds are paid; the blocking reason feeds the banned-commands modal).
+    if (this.economy.isBankrupt()) return { ok: false, reason: 'bankrupt' };
     let res: CommandResult;
     if (cmd.kind === 'place-road') {
       const v = validateRoad(this.world, this.economy, cmd.path);
@@ -185,6 +193,11 @@ export class Sim {
       // T-208: jobs/unemployment 0 per demand.ts's T-305 cohort ledger (visible-but-honest zeros).
       jobs: 0,
       unemployment: 0,
+      bankrupt: this.economy.isBankrupt(),
+      lastMonth: (() => {
+        const m = this.economy.lastMonth();
+        return { income: m.income, expense: m.expense };
+      })(),
       size: this.world.size,
       seed: this.world.seed,
       paused: this.clock.paused,

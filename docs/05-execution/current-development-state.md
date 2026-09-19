@@ -5,8 +5,8 @@
 > Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
 > Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
-- **Updated:** 2026-09-19 #9 (Asia/Jakarta)
-- **HEAD:** T-208 HUD commit (see `git log`)
+- **Updated:** 2026-09-19 #10 (Asia/Jakarta)
+- **HEAD:** T-301 treasury commit (see `git log`)
 - **Slices complete:** VS-0, VS-1. **VS-2a: subtask-semua ✅ (engine-level);** evidence visual (screenshot/icon) BLOCKED lingkungan — milestone masih ⚠️ CONDITIONAL sampai screenshot retro-capture.
 
 ## Slice status
@@ -15,6 +15,7 @@
 |-------|-------|----------|
 | VS-0 Scaffold | ✅ DONE | `evidence/vs0-smoke.png`, CI green, `perf/baseline.json` |
 | VS-1 First tile | ✅ DONE | `evidence/vs1-{boot,built,loaded,persp,bay}.png`, 47 unit + 6 E2E green, coverage 86.6/72.5/82.5 |
+| VS-3 Economy | 🔶 IN PROGRESS | T-301 ✅ engine (138/138; settle income−upkeep kanonis docs/02 §4) |
 | VS-2a First House | ⚠️ CONDITIONAL (engine ✅) | T-201 ✅ · T-202..T-208 ✅ engine · visual evidence BLOCKED (132/132 suite, dayP95 0.74ms) |
 | VS-2b..VS-7 | ⬜ QUEUED | — |
 

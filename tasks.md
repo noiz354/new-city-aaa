@@ -134,15 +134,25 @@
     jobs/unemployment 0 konstan PENUH intentional (ledger demand.ts: cohort/jobs model = T-305); render-test
     memastikan angka tumbuh muncul (→132 tests; glob vitest diperluas untuk .test.tsx).
   - **Remaining:** screenshot. **Blocker: lingkungan** (tanpa browser) — identik VS-2a.
-- [ ] **VS-2 GATE:** UJ-01 + UJ-02 partial (rumah/shop spawn, pop tumbuh, $ tick).
-  - **ENGINE-COMPLETE 2026-09-19 (visual gate blocked lingkungan):** shop spawn + $ monthly tick +
-    pop≥25 KEDUANYA tercapai di growth determinisme test + upkeep test. Bermuara final: save/format intact,
-    persistence round-trip hijau, 132/132 suite, perf 0.74ms/day p95.
+- [x] **VS-2 GATE:** UJ-01 + UJ-02 partial (rumah/shop spawn, pop tumbuh, $ tick). **ENGINE-VERIFIED**
+  - **Verdict 2026-09-19 — engine-complete via test suite (visual capture blocked lingkungan, inherited):**
+    rumah/shop spawn (growth determinisme test: seed 25 hierarki R birth d4, C d7), pop tumbuh ≥25
+    (growth determinisme + desirability), $ tick bulanan (upkeep tests: −$120/bln build-only + savings→d5),
+    save→reload→lanjut (round-trip byte-equal tests, roads/subsidi parity). Suite 132/132, perf 0.74ms p95.
+    Visual playthrough (screenshot milestone) tetap di retro-capture list per status conditioned.
 
 ## VS-3 — Economy That Bites (T-3xx)
 
-- [ ] **T-301 M — Treasury monthly tick penuh.** Tax income − upkeep − service funding; bankrupt block + modal.
+- [x] **T-301 M — Treasury monthly tick penuh.** Tax income − upkeep − service funding; bankrupt block + modal. **DONE (engine)**
   `Deps: VS-2 GATE` · `Accept: month tick benar (unit test).` · `Evidence: test log.` · `Skills: city-builder-simulation-audit, tdd`
+  - **Status: DONE 2026-09-19** — acceptance unit-test-based (month tick benar): formula kanonik docs/02 §4
+    (income = TAX_BASE × rate/9 × (0.6+0.4·happy/100), happy stub 80 ledger T-305; TAX_BASE = 1.25× upkeep
+    "first guess, S-green calibrates" per progression §2); settle order income→upkeep→record; ring 12 bln
+    (derived-analytics, sengaja tanpa save-format change); bankruptcy < −$5k → execute() reject 'bankrupt'
+    + BankruptcyModal (T-303 mengganti dengan budget panel); setTax clamp 0..20 (seam T-302).
+  - **Evidence: vitest log** — economy.test.ts 7/7 (income exact 23 = 25×0.92; clamp; settle+ring; wrap;
+    bankrupt recover; cadence) + 3 upkeep tests direvisi ke settle-semantics. Suite 138/138, perf hijau.
+  - **Note:** service funding (slider 50/100/150%) milik T-303; tax-rate persist ikut T-302 (§9-format).
 - [ ] **T-302 M — Slider pajak R/C/I.** 0–20% (default 9%); income = Σ level×rate×happinessFactor.
   `Deps: T-301` · `Accept: 15% → income↑ happiness↓ (UJ-05 partial).` · `Evidence: screenshot + test.` · `Skills: frontend-ui-engineering`
 - [ ] **T-303 M — Budget panel.** Breakdown income/expense + sparkline 12 bulan + slider funding service.

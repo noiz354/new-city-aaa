@@ -104,6 +104,10 @@ export interface SimSnapshot {
   jobs: number;
   /** T-208 FR-U02: fraction currently unemployed ∈ [0,1]; same T-305 ledger ⇒ 0. */
   unemployment: number;
+  /** T-301 docs/02 §4: balance < −$5,000 — paid commands blocked, budget modal forced. */
+  bankrupt: boolean;
+  /** T-301: last settled month, drives the budget panel sparkline (T-303) later. */
+  lastMonth: { income: number; expense: number };
   size: number;
   seed: number;
   paused: boolean;

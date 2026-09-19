@@ -8,21 +8,23 @@ const noop = () => {};
 const actions = new Proxy({} as UiActions, { get: () => noop }); // TopBar only forwards; never invoked here
 
 function snap(over: Partial<SimSnapshot>): SimSnapshot {
-  return {
-    tick: 0,
-    date: { year: 1, month: 1, day: 1, dayIndex: 0 },
-    balance: 50_000,
-    population: 0,
-    demand: { r: 0, c: 0, i: 0 },
-    jobs: 0,
-    unemployment: 0,
-    size: 64,
-    seed: 1,
-    paused: false,
-    speed: 1,
-    counts: { roads: 0, zonesR: 0, zonesC: 0, zonesI: 0 },
-    ...over,
-  };
+    return {
+      tick: 0,
+      date: { year: 1, month: 1, day: 1, dayIndex: 0 },
+      balance: 50_000,
+      population: 0,
+      demand: { r: 0, c: 0, i: 0 },
+      jobs: 0,
+      unemployment: 0,
+      bankrupt: false,
+      lastMonth: { income: 0, expense: 0 },
+      size: 64,
+      seed: 1,
+      paused: false,
+      speed: 1,
+      counts: { roads: 0, zonesR: 0, zonesC: 0, zonesI: 0 },
+      ...over,
+    };
 }
 
 describe('T-208 FR-U02 — HUD pop/jobs/unemployment follow city growth', () => {

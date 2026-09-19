@@ -151,3 +151,8 @@
 .rci-c.pos { color: #1e88e5; }
 .rci-i.pos { color: #fbc02d; }
 .rci .neg { opacity: 0.55; }
+
+/* T-301: budget/bankrupt modal scaffold */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 40; }
+.modal { max-width: 380px; padding: 14px 18px; }
+.modal h2 { margin: 0 0 8px; }

@@ -75,7 +75,10 @@ describe('Upkeep monthly tick (T-205, FR-E03)', () => {
     runDays(sim, 14); // day 29: no month boundary crossed since
     const before = sim.snapshot().balance;
     runDays(sim, 1); // day 30 → month pass #1
-    expect(before - sim.snapshot().balance).toBe(17);
+    // T-301: the settle is now income − (gross − subsidy); upkeep side must still be floor(25×0.7)=17.
+    const m1 = sim.economy.lastMonth();
+    expect(m1.expense - m1.subsidy).toBe(17);
+    expect(before - sim.snapshot().balance).toBe(17 - m1.income);
     expect(sim.snapshot().population).toBeGreaterThan(0);
     expect(sim.snapshot().population).toBeLessThan(500);
   });
@@ -101,7 +104,11 @@ describe('Upkeep monthly tick (T-205, FR-E03)', () => {
     runDays(sim, 19); // day 159 — month pass #5 (day 150) already charged full
     const before = sim.snapshot().balance;
     runDays(sim, 31); // day 190: exactly one month pass (day 180) in between
-    expect(before - sim.snapshot().balance).toBe(297); // full gross, no subsidy
+    // T-301: net debit = full upkeep (no subsidy) − settled tax income of that same month pass.
+    const m2 = sim.economy.lastMonth();
+    expect(m2.subsidy).toBe(0);
+    expect(m2.expense).toBe(297);
+    expect(before - sim.snapshot().balance).toBe(297 - m2.income); // full gross, no subsidy
     expect(gross.net).toBe(297);
   });
 
@@ -124,9 +131,13 @@ describe('Upkeep monthly tick (T-205, FR-E03)', () => {
   });
 
   it('balance may go negative: upkeep debits even when the treasury cannot afford it', () => {
-    const sim = buildRTown(2);
-    sim.economy.balance = 0; // lawful: bankruptcy handling is T-301, not here
-    runDays(sim, 31); // month pass: 2×R1 gross 4, subsidy floor(4×7/10)=2
+    // T-301 world: a housed city collects income (≥ upkeep for healthy lots, by the 1.25× guard);
+    // the honest negative case is roads-only — zero tax base, upkeep still debits.
+    const sim = new Sim({ seed: 7, size: 64, preset: 'plains' });
+    sim.execute({ kind: 'place-road', path: [10, 11, 12, 13].map((x) => ({ x, y: 10 })) });
+    sim.economy.balance = 0;
+    runDays(sim, 31); // month pass: 4 road tiles gross floor(4/2)=2, subsidy → floor(2×7/10)=1
+    expect(sim.economy.lastMonth().income).toBe(0);
     expect(sim.snapshot().balance).toBeLessThan(0);
   });
 
