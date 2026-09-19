@@ -1,91 +1,169 @@
-# TASKS.md — Atomic, Ordered, Gated Task List
+# TASKS — city-builder-aaa (kanonis)
 
-> Each task = **one focused session**, one PR (<300 lines), with **acceptance + evidence**. Do not start T-n+1 until T-n is confirmed working — per your original prompt.
+> **Status:** canonical. Setiap task = satu sesi fokus, satu PR (<300 baris), dengan **acceptance + evidence**.
+> Jangan mulai T berikutnya sebelum T berjalan dikonfirmasi bekerja.
+> Ukuran: **S** (<1 jam) · **M** (1–3 jam) · **L** (3–6 jam). `Deps` wajib selesai dulu.
+> Aturan centang: `- [ ]` → `- [x]` **hanya** setelah gate DoD lolos + bukti dilampirkan
+> (`05-execution/definition-of-done.md`, `05-execution/verification-strategy.md`).
+> Rujuk ID FR di `docs/spec.md` + modul di `02-architecture/` pada setiap PR.
+> Skill aktual per )).group lih. `docs/06-agent-skills/skill-task-mapping.md`
+> (nama generik seperti `simulation-core`/`threejs-rendering` **tidak ada** — pakai nama di bawah).
 >
-> Sizes: **S** (<1hr) · **M** (1–3hr) · **L** (3–6hr). `Deps` must be done first.
+> **Status reconcile (2026-09-19):** VS-0 dan VS-1 `[x]` terverifikasi (bukti: typecheck/build/test hijau,
+> dev 200 OK port 5180, save hash-equal, F3 overlay — lih. `docs/05-execution/current-development-state.md`).
+> Semua tahap lain `[ ]` — termasuk yang disebut di dokumen lama seolah selesai.
 
-## Conventions
+## VS-0 — Foundation (T-1xx)
 
-- Task ID format `T-###`. Reference `spec.md` FR + `plan.md` module in every PR.
-- **Evidence required:** what to show (test log / screenshot / F3 overlay / save hash).
-- Mark tasks `- [ ]` → `- [x]` only after user confirms.
+- [x] **T-101 S — Scaffold + commands.** Vite + TS strict + ESLint + Vitest + Playwright skeleton.
+  `Deps: —` · `Accept: npm run dev|typecheck|test|build pass.` · `Evidence: terminal log.` · `Skills: tdd, codebase-design`
+- [x] **T-102 S — Kontrak sim/view + clock.** Fixed-step accumulator, pause/1x/2x/3x, day counter, F3 overlay (fps + tickMs).
+  `Deps: T-101` · `Accept: speed mengubah ticks/sec; render decoupled.` · `Evidence: F3 screenshot.` · `Skills: tdd`
+- [x] **T-103 S — Grid SoA + terrain seeded.** Typed-array grid (flag 256), noise terrain + water plane.
+  `Deps: T-101` · `Accept: seed sama → identik; seed beda → beda.` · `Evidence: 2 screenshot seed sama.` · `Skills: tdd`
 
-## M1 — Core Engine & Viz (FR-R01..03, FR-W01, FR-S01)
+## VS-1 — First Tile (T-104..T-110)
 
-- [ ] **T-001 S — Scaffold + commands.** Vite + TS strict + ESLint + Vitest + Playwright skeleton. `Deps: —` · `Accept: npm run dev|build|test all pass.` · `Evidence: terminal log.`
-- [ ] **T-002 M — Renderer + cameras.** Scene, ACES, fog, hemi+dir lights, Ortho↔Persp rig with damped orbit/pan/zoom. `Deps: T-001` · `Accept: empty ground plane, toggle cameras, 60fps.` · `Evidence: screenshot + fps.`
-- [ ] **T-003 M — Grid + terrain gen.** Typed-array grid 128² (flag →256), seeded noise terrain + water plane. `Deps: T-001` · `Accept: new seed → new terrain; same seed → identical.` · `Evidence: 2 screenshots same seed.`
-- [ ] **T-004 M — Picking + highlight.** Raycast-to-plane → tile coords, hover highlight, click inspector stub. `Deps: T-002,T-003` · `Accept: hover shows (x,y); works both cameras.` · `Evidence: short clip/screenshot.`
-- [ ] **T-005 S — Game clock.** Fixed-step accumulator, pause/1x/2x/3x, day counter, F3 overlay (fps + tickMs). `Deps: T-001` · `Accept: speeds change ticks/sec; render decoupled.` · `Evidence: F3 screenshot.`
-- [ ] **M1 GATE:** empty-map orbit + select @60fps; `npm run test` green.
+- [x] **T-104 M — Renderer + kamera.** Scene, ACES, fog, hemi+dir light, rig Ortho↔Persp damped orbit/pan/zoom.
+  `Deps: T-101` · `Accept: ground plane kosong, toggle kamera, 60fps.` · `Evidence: screenshot + fps.` · `Skills: three-best-practices`
+- [x] **T-105 M — Picking + highlight.** Raycast-to-plane → koordinat tile, hover highlight, inspector stub.
+  `Deps: T-104` · `Accept: hover tampil (x,y); dua kamera.` · `Evidence: screenshot.` · `Skills: three-best-practices, webapp-testing`
+- [x] **T-106 M — Toolbar + tool state.** Select/Road/R/C/I/PowerLine/Plant/Water/Bulldoze + Esc cancel + cost stub.
+  `Deps: T-105` · `Accept: ganti tool + label kursor.` · `Evidence: screenshot.` · `Skills: frontend-ui-engineering, city-builder-visual-qa`
+- [x] **T-107 M — Road placement.** Drag-line preview validitas hijau/merah, cost = length×price, tulis road layer.
+  `Deps: T-106` · `Accept: drag L-shape bekerja; dana terpotong.` · `Evidence: screenshot + treasury log.` · `Skills: city-builder-playability-test`
+- [x] **T-108 M — Zone painting + bulldoze.** Drag-rect R/C/I + marquee bulldoze; chunk dirty flag.
+  `Deps: T-106` · `Accept: zona berwarna; bulldoze membersihkan.` · `Evidence: screenshot.` · `Skills: city-builder-playability-test`
+- [x] **T-109 M — Instanced meshers dasar.** Terrain 1-draw + road merge + InstancedMesh bangunan + pohon.
+  `Deps: T-103,T-107` · `Accept: 2k zona render, draw call <100.` · `Evidence: draw-call HUD.` · `Skills: three-best-practices, city-builder-performance-gate`
+- [x] **T-110 M — Save format v1 + HUD dasar.** Header + binary layers + entities, gzip + hash; topbar/toolbar/inspector.
+  `Deps: T-103` · `Accept: save→load hash equal pada fixture.` · `Evidence: vitest log.` · `Skills: tdd, city-builder-playability-test`
+- [x] **VS-1 GATE:** orbit + select @60fps map kosong; `npm run test` hijau; dev 200 OK `:5180`.
 
-## M2 — Tools & Assets (FR-T01..03, FR-R04, FR-X01)
+## VS-2 — First Living City (T-2xx) — NEXT
 
-- [ ] **T-006 M — Toolbar + tool state.** Select/Road/R/C/I/PowerLine/Plant/Water/Bulldoze buttons + Esc cancel + costs stub. `Deps: T-004` · `Accept: tool switching + cursor label.` · `Evidence: screenshot.`
-- [ ] **T-007 M — Road placement.** Drag-line preview (green/red validity), cost = length×price, writes road layer + rebuilds graph stub. `Deps: T-006` · `Accept: L-shaped road drag works; funds deducted.` · `Evidence: screenshot + treasury log.`
-- [ ] **T-008 M — Zone painting.** Drag-rect R/C/I paint + bulldoze marquee; chunk dirty flags. `Deps: T-006` · `Accept: painted zones render colored; bulldoze clears.` · `Evidence: screenshot.`
-- [ ] **T-009 M — Instanced meshers.** Terrain 1-draw + merged roads/chunk + InstancedMesh buildings + tree instancing. `Deps: T-003,T-007` · `Accept: 2k zones render, draw calls <100 (dev counter).` · `Evidence: draw-call HUD screenshot.`
-- [ ] **T-010 S — Asset loader.** GLTF loader + cache + fallback procedural box; `assets/buildings/*.glb` registry JSON. `Deps: T-009` · `Accept: missing file → fallback, no crash.` · `Evidence: console log.`
-- [ ] **M2 GATE:** UJ-01 partial (roads+zones+costs, no growth yet).
+> Slice pertama: **VS-2a First House** = T-201..T-203 (satu rumah tulus tumbuh, bukan hardcode).
 
-## M3 — Sim Loop: RCI + Citizens + Treasury (FR-S, FR-C01..02, FR-E01..03)
+- [ ] **T-201 M — Building lifecycle state.** State machine vacant→construction→occupied→abandoned + entity `buildings[]` terisi.
+  `Deps: VS-1 GATE` · `Accept: transisi terdokumen + unit test tiap transisi.` · `Evidence: vitest log.` · `Skills: city-builder-simulation-audit, tdd`
+- [ ] **T-202 M — Growth engine v0.** Scoring harian → spawn 1 rumah pada tile zoned+road+powered dalam ~10 game-day.
+  `Deps: T-201` · `Accept: pop>0; screenshot before/after.` · `Evidence: screenshot + pop HUD.` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
+- [ ] **T-203 M — Visual rumah + instancing.** Procedural house mesh + InstancedMesh swap saat spawn; 0 crash bila aset hilang.
+  `Deps: T-202` · `Accept: rumah terlihat di tile tumbuh.` · `Evidence: screenshot.` · `Skills: three-best-practices, city-builder-visual-qa`
+- [ ] **T-204 M — Road-access rule.** Tanpa path → ikon "No road connection", growth berhenti.
+  `Deps: T-202` · `Accept: zona terisolasi tidak tumbuh + ikon tampil.` · `Evidence: screenshot.` · `Skills: city-builder-simulation-audit`
+- [ ] **T-205 M — Upkeep tick.** Upkeep bulanan per bangunan; treasury berkurang terukur + unit test.
+  `Deps: T-202` · `Accept: month tick mengubah $ benar.` · `Evidence: test log + HUD.` · `Skills: city-builder-simulation-audit, tdd`
+- [ ] **T-206 M — RCI demand v0.** Demand −100..+100 dari unemployment/happiness/tax; RCI bar HUD merespons.
+  `Deps: T-205` · `Accept: 80% branch coverage fungsi demand.` · `Evidence: vitest log.` · `Skills: city-builder-simulation-audit, tdd`
+- [ ] **T-207 M — Land value v0 + desirability.** Base − pollution + halo park/air; difusi 3×3; overlay.
+  `Deps: T-202` · `Accept: park menaikkan value sekitar; overlay gradien.` · `Evidence: overlay screenshot.` · `Skills: city-builder-simulation-audit`
+- [ ] **T-208 S — HUD pop/RCI(p4).** Populasi + RCI bar + jobs + unemployment selalu terlihat; update 4Hz.
+  `Deps: T-206` · `Accept: angka berubah saat kota tumbuh.` · `Evidence: HUD screenshot.` · `Skills: frontend-ui-engineering`
+- [ ] **VS-2 GATE:** UJ-01 + UJ-02 partial (rumah/shop spawn, pop tumbuh, $ tick).
 
-- [ ] **T-011 M — RCI demand model.** Implement formula in `docs/03`; unit tests for unemployment/tax effects. `Deps: T-005` · `Accept: 80% branch coverage on demand fn.` · `Evidence: vitest log.`
-- [ ] **T-012 M — Growth engine.** Daily scoring → spawn/upgrade/abandon; levels 1–3; procedural building swap. `Deps: T-011,T-008` · `Accept: zoned+road tiles grow in ~10 game-days.` · `Evidence: before/after screenshot + pop>0.`
-- [ ] **T-013 M — Citizens + jobs (cohorts).** Residents/jobs counts, gravity job-match, unemployment + happiness. `Deps: T-012` · `Accept: R+C+I city → unemployment <50%, RCI bars respond.` · `Evidence: HUD screenshot.`
-- [ ] **T-014 M — Land value + desirability.** Base − pollution + park/water halo, 3×3 diffusion; overlay view. `Deps: T-012` · `Accept: park raises nearby value; overlay shows gradient.` · `Evidence: overlay screenshot.`
-- [ ] **T-015 M — Treasury + monthly tick.** Start $20k, upkeep + tax income, bankruptcy block. `Deps: T-012` · `Accept: month tick changes $ correctly (unit test).` · `Evidence: test log + HUD.`
-- [ ] **M3 GATE:** UJ-01 + UJ-02 pass (houses/shops spawn, pop grows, $ ticks).
+## VS-3 — Economy That Bites (T-3xx)
 
-## M4 — Traffic, Pathfinding, Utilities (FR-C03..06, FR-U)
+- [ ] **T-301 M — Treasury monthly tick penuh.** Tax income − upkeep − service funding; bankrupt block + modal.
+  `Deps: VS-2 GATE` · `Accept: month tick benar (unit test).` · `Evidence: test log.` · `Skills: city-builder-simulation-audit, tdd`
+- [ ] **T-302 M — Slider pajak R/C/I.** 0–20% (default 9%); income = Σ level×rate×happinessFactor.
+  `Deps: T-301` · `Accept: 15% → income↑ happiness↓ (UJ-05 partial).` · `Evidence: screenshot + test.` · `Skills: frontend-ui-engineering`
+- [ ] **T-303 M — Budget panel.** Breakdown income/expense + sparkline 12 bulan + slider funding service.
+  `Deps: T-301` · `Accept: panel akurat vs sim.` · `Evidence: screenshot.` · `Skills: vercel-react-best-practices, frontend-ui-engineering`
+- [ ] **T-304 M — RCI demand matang.** Bobot unemployment/happiness/land/tax final + unit test.
+  `Deps: T-302` · `Accept: R+C+I → unemployment <20%.` · `Evidence: HUD screenshot.` · `Skills: city-builder-simulation-audit`
+- [ ] **T-305 M — Citizens + jobs (cohort).** Resident/job count, gravity match, unemployment + happiness.
+  `Deps: T-304` · `Accept: kota R+C+I unemployment <20%.` · `Evidence: HUD screenshot.` · `Skills: city-builder-simulation-audit`
+- [ ] **T-306 M — Balancing suite + tuning lock.** Korpus skenario ekonomi hijau; angka tuning dikunci.
+  `Deps: T-305` · `Accept: suite hijau.` · `Evidence: CI log.` · `Skills: city-builder-simulation-audit, city-builder-performance-gate`
+- [ ] **VS-3 GATE:** UJ-01 + UJ-02 penuh; UJ-05 lolos.
 
-- [ ] **T-016 M — Road graph builder.** Nodes/edges from road tiles, incremental rebuild on dirty chunks; unit tests (T-junction, loop). `Deps: T-007` · `Accept: graph matches fixtures.` · `Evidence: vitest log.`
-- [ ] **T-017 L — A* + cache + worker.** Binary-heap A*, BPR weights, O-D cache, worker offload; `npm run perf` harness. `Deps: T-016` · `Accept: 500 paths <100ms; same-seed deterministic.` · `Evidence: perf log.`
-- [ ] **T-018 M — Traffic assignment + viz.** Volumes → v/c → LOS colors overlay + congestion alerts. `Deps: T-017,T-013` · `Accept: single-road city congests (red); parallel road relieves.` · `Evidence: 2 overlay screenshots (UJ-03).`
-- [ ] **T-019 M — Visual agents pool.** 500 cars + 300 peds sampled from top flows; loop along paths; headlight sprites at night. `Deps: T-018` · `Accept: cars visible on busy roads, 0 when paused.` · `Evidence: screenshot.`
-- [ ] **T-020 M — Power flood fill.** Plants + lines/roads conduct; supply/demand per net; brownout I-first rule; overlay + icons. `Deps: T-007` · `Accept: overload → unpowered icons; 2nd plant fixes (UJ-04).` · `Evidence: overlay screenshots.`
-- [ ] **T-021 M — Water + pressure.** Towers/pumps + pipes/roads; pressure falloff; unwatered halts growth. `Deps: T-020` · `Accept: far building unwatered until 2nd tower.` · `Evidence: screenshot.`
-- [ ] **M4 GATE:** UJ-03 + UJ-04 pass.
+## VS-4 — Traffic & Utilities (T-4xx)
 
-## M5 — Economy UI + Persistence (FR-E04..05, FR-P)
+- [ ] **T-401 M — Road graph builder.** Node/edge dari road tile, rebuild incremental; unit test T-junction + loop.
+  `Deps: VS-3 GATE` · `Accept: graph cocok fixture.` · `Evidence: vitest log.` · `Skills: tdd, city-builder-simulation-audit`
+- [ ] **T-402 L — A* + cache + worker.** Binary-heap A*, bobot BPR, cache O-D, offload worker; harness `npm run perf`.
+  `Deps: T-401` · `Accept: 500 path <100ms; deterministik seed sama.` · `Evidence: perf log.` · `Skills: tdd, city-builder-simulation-audit`
+- [ ] **T-403 M — Traffic assignment + viz.** Volume → v/c → warna LOS + alert congestion.
+  `Deps: T-402` · `Accept: 1 jalan macet (merah); paralel melegakan (UJ-03).` · `Evidence: 2 overlay screenshot.` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
+- [ ] **T-404 M — Visual agent pool.** 500 mobil + 300 pejalan sampling top flow; headlight malam.
+  `Deps: T-403` · `Accept: mobil di jalan sibuk, 0 saat pause.` · `Evidence: screenshot.` · `Skills: three-best-practices`
+- [ ] **T-405 M — Power flood fill.** Plant + line/road hantar; supply/demand per net; brownout I-first; overlay + ikon.
+  `Deps: T-401` · `Accept: overload → ikon unpowered; plant ke-2 pulihkan (UJ-04).` · `Evidence: overlay screenshot.` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
+- [ ] **T-406 M — Water + pressure.** Tower/pump + pipe/road; falloff jarak/beban; unwatered hentikan growth.
+  `Deps: T-405` · `Accept: bangunan jauh unwatered sampai tower ke-2.` · `Evidence: screenshot.` · `Skills: city-builder-simulation-audit`
+- [ ] **T-407 S — Overlay utilitas.** Tab power/water/traffic/value + inspector akurat.
+  `Deps: T-403,T-405` · `Accept: semua overlay render.` · `Evidence: screenshots.` · `Skills: frontend-ui-engineering, city-builder-visual-qa`
+- [ ] **VS-4 GATE:** UJ-03 + UJ-04 lolos.
 
-- [ ] **T-022 M — Budget panel.** Tax sliders (R/C/I 0–20%), service funding, income/expense breakdown + 12-mo sparkline. `Deps: T-015` · `Accept: 15% tax → income↑ happiness↓ (UJ-05).` · `Evidence: screenshot + test.`
-- [ ] **T-023 M — Overlays + inspector.** Power/water/traffic/value/pollution/happiness tabs; click building → details (level, residents, jobs, powered, rent). `Deps: T-014,T-018,T-020` · `Accept: all overlays render; inspector accurate.` · `Evidence: screenshots.`
-- [ ] **T-024 M — Save format v1.** Header + binary layers + entities, gzip, FNV hash; unit roundtrip test. `Deps: T-003,T-012` · `Accept: save→load hash equal on fixture.` · `Evidence: vitest log.`
-- [ ] **T-025 M — Slots + autosave + export.** IndexedDB 3+1 slots, autosave 5min/year, base64 share string, PNG button. `Deps: T-024` · `Accept: reload → load identical (UJ-07); <2s/<3s.` · `Evidence: timing log.`
-- [ ] **M5 GATE:** MVP COMPLETE — UJ-01..07 pass; `npm run e2e` green.
+## VS-5 — Render Tier & Feel (T-5xx)
 
-## M6 — AAA Render + Feel (FR-R04..07, FR-A01)
+- [ ] **T-501 M — Day/night + night windows.** Orbit matahari, lerp sky/fog, atlas emissive + uniform `nightFactor`, glow lampu.
+  `Deps: VS-4 GATE` · `Accept: night shot menyala; 0 real light tambahan (UJ-08).` · `Evidence: screenshot day/night.` · `Skills: three-best-practices, city-builder-visual-qa`
+- [ ] **T-502 M — LOD + culling + preset.** Chunk culling, LOD full/box, Low/Med/High/Ultra + Low-FX.
+  `Deps: T-501` · `Accept: 10k bangunan <200 draws, 30fps+ Med.` · `Evidence: F3 + draw HUD.` · `Skills: three-best-practices, city-builder-performance-gate`
+- [ ] **T-503 S — Post-FX.** AA + bloom subtle + vignette; toggleable.
+  `Deps: T-502` · `Accept: on/off <8% delta fps Med.` · `Evidence: fps compare.` · `Skills: three-best-practices`
+- [ ] **T-504 M — Audio engine.** Ambient WebAudio (angin/traffic skala pop) + stinger + mute/volume persisten.
+  `Deps: VS-4 GATE` · `Accept: mute persisten; no autoplay pre-gesture.` · `Evidence: settings screenshot.` · `Skills: webapp-testing`
+- [ ] **T-505 M — 256² + perf pass.** Default 256², object pool, HUD throttle 4Hz, gate `perf` di CI.
+  `Deps: T-502` · `Accept: NFR-01/03 pada mesin referensi.` · `Evidence: perf log.` · `Skills: performance-optimization, city-builder-performance-gate`
+- [ ] **VS-5 GATE:** UJ-08 + NFR-01 lolos.
 
-- [ ] **T-026 M — Day/night + night windows.** Sun orbit, sky/fog lerp, emissive window atlas + `nightFactor` uniform, lamp glow sprites. `Deps: M5` · `Accept: UJ-08 night shot looks lit; 0 extra real lights.` · `Evidence: day/night screenshots.`
-- [ ] **T-027 M — LOD + culling + quality presets.** Chunk culling, building LOD (full/box), Low/Med/High/Ultra + Low-FX (no post). `Deps: T-009` · `Accept: 10k buildings: <200 draws, 30fps+ Med.` · `Evidence: F3 + draw HUD.`
-- [ ] **T-028 S — Post-FX.** AA + bloom (subtle) + vignette; toggleable. `Deps: T-027` · `Accept: on/off has <8% fps delta on Med.` · `Evidence: fps compare.`
-- [ ] **T-029 M — Audio engine.** WebAudio ambient (wind/traffic by pop) + UI/build/error/disaster stingers + mute/volume. `Deps: M5` · `Accept: mute persists; no autoplay before gesture.` · `Evidence: settings screenshot.`
-- [ ] **T-030 M — 256² + perf pass.** Default map 256², object pools, HUD 4Hz throttle, `npm run perf` gates in CI. `Deps: T-027` · `Accept: NFR-01/03 met on ref machine.` · `Evidence: perf log.`
-- [ ] **M6 GATE:** beauty + perf — UJ-08 + NFR-01 pass.
+## VS-6 — Crisis & Depth (T-6xx)
 
-## M7 — Polish & Ship (FR-X02..05, FR-A02..03, NFRs)
+- [ ] **T-601 M — Services.** Fire/police/school/clinic/park coverage jarak-jalan + upkeep; overlay radius.
+  `Deps: VS-5 GATE` · `Accept: sekolah naikkan happiness sekitar.` · `Evidence: screenshot.` · `Skills: city-builder-simulation-audit`
+- [ ] **T-602 M — Pollution/crime/health/happiness.** Field + difusi + overlay + efek growth.
+  `Deps: T-601` · `Accept: industri polusi → R sekitar abandon bila tinggi.` · `Evidence: overlay + test.` · `Skills: city-builder-simulation-audit`
+- [ ] **T-603 M — Disaster.** Fire spread + earthquake + meteor + toggle random + loop rubble/bulldoze.
+  `Deps: VS-5 GATE` · `Accept: meteor → rubble → rebuild → recovery (UJ-06).` · `Evidence: screenshots.` · `Skills: city-builder-playability-test`
+- [ ] **T-604 M — Tutorial + advisor.** Checklist 5 langkah + 3 tips bergilir + click-to-locate.
+  `Deps: VS-5 GATE` · `Accept: pemain baru 1k pop <15 mnt (skrip manual).` · `Evidence: checklist screenshot.` · `Skills: city-builder-playability-test`
+- [ ] **T-605 S — Minimap + notifikasi.** Canvas 128px + queue info/warn/critical + settings.
+  `Deps: T-604` · `Accept: klik alert → kamera lompat.` · `Evidence: screenshot.` · `Skills: frontend-ui-engineering`
+- [ ] **T-606 S — Aksesibilitas + docs.** Path keyboard-only, overlay aman colorblind (ikon+pola), keybind list, FAQ.
+  `Deps: T-605` · `Accept: checklist NFR-05 signed.` · `Evidence: checklist.` · `Skills: frontend-ui-engineering`
+- [ ] **VS-6 GATE:** UJ-05 + UJ-06 lolos; MVP COMPLETE (UJ-01..07 gabungan VS-2..VS-5).
 
-- [ ] **T-031 M — Tutorial + advisors.** 5-step checklist + 3 rotating advisor tips + click-to-locate alerts. `Deps: M5` · `Accept: new player hits 1k pop <15min (manual script).` · `Evidence: checklist screenshot.`
-- [ ] **T-032 M — Services (fire/police/school/clinic/park).** Coverage by road-distance, affects happiness/growth; upkeep. `Deps: T-014` · `Accept: school raises nearby happiness; overlay shows radius.` · `Evidence: screenshot.`
-- [ ] **T-033 M — Pollution/crime/health/happiness.** Fields + diffusion + overlays + growth effects. `Deps: T-032` · `Accept: industry pollutes; R nearby abandons if high.` · `Evidence: overlay + test.`
-- [ ] **T-034 M — Disasters.** Fire spread + earthquake + meteor trigger + random toggle + rubble/bulldoze loop. `Deps: M5` · `Accept: meteor → rubble → rebuild → recovery (UJ-06).` · `Evidence: screenshots.`
-- [ ] **T-035 S — Minimap + notifications.** 128px canvas minimap + queue (info/warn/critical) + settings (quality/FX/autosave/keybinds). `Deps: T-023` · `Accept: click alert → camera jumps.` · `Evidence: screenshot.`
-- [ ] **T-036 S — Accessibility + docs.** Keyboard-only build path, colorblind-safe overlays (icons+patterns), keybind list, player FAQ. `Deps: T-035` · `Accept: NFR-05 checklist signed.` · `Evidence: checklist.`
-- [ ] **T-037 S — Ship gate.** Full `test+e2e+perf`, bundle <5MB initial, save-migration test, release notes. `Deps: all` · `Accept: all NFRs + UJ-01..08 pass.` · `Evidence: CI log + release tag.`
-- [ ] **M7 GATE:** SHIPPED v1.0. Stretch next: transit, scenarios, mods, PWA.
+## VS-7 — Hardening & Ship (T-7xx)
 
-## Stretch Backlog (post-v1, flagged)
+- [ ] **T-701 M — E2E penuh.** Skrip UJ-01..08 terekam; `npm run e2e` hijau.
+  `Deps: VS-6 GATE` · `Accept: semua UJ lolos.` · `Evidence: CI log.` · `Skills: webapp-testing, city-builder-playability-test`
+- [ ] **T-702 M — Save migration + korpus.** Bump versi + migrasi + korpus lintas versi hijau.
+  `Deps: T-701` · `Accept: save lama termuat; korup → recovery.` · `Evidence: test log.` · `Skills: tdd`
+- [ ] **T-703 S — Bundle + perf gate.** Initial <5MB; gate F3/`perf` di CI.
+  `Deps: T-701` · `Accept: NFR-01/02/03 pada referensi.` · `Evidence: perf log.` · `Skills: city-builder-performance-gate`
+- [ ] **T-704 S — Ship gate.** Release notes + tag; checklist NFR-01..07.
+  `Deps: T-701,T-702,T-703` · `Accept: semua NFR + UJ-01..08.` · `Evidence: CI log + tag.` · `Skills: code-review-and-quality`
+- [ ] **VS-7 GATE:** SHIPPED v1.0.
 
-- T-101 Transit (bus lines, stops, mode split) · T-102 Road hierarchy (avenue/highway/one-way) · T-103 Scenarios + achievements · T-104 Mod packs (building JSON) · T-105 Flood/season/weather · T-106 PWA offline
+## VS-8 — Large City & Depth Lanjutan (T-8xx, pasca-v1)
 
-## Anti-Rationalization Table (Addy style — read before skipping)
+- [ ] **T-801 M — Transit (bus).** Line + stop + mode split.
+- [ ] **T-802 M — Hierarki jalan.** Avenue/highway/one-way di belakang flag.
+- [ ] **T-803 M — Cuaca/musim/flood.** Sistem + overlay + efek growth.
+- [ ] **T-804 M — Skenario + achievement.** Engine skenario + E2E skenario.
+- [ ] **T-805 M — Mod pack JSON.** Registry bangunan + validasi + contoh pack.
+- [ ] **VS-8 GATE:** expansion playable; save v1 aman (bump + migrasi bila perlu).
 
-| Excuse | Pushback | Required instead |
-|--------|----------|------------------|
-| "Too simple for a test" | Sim math breaks silently; UJ needs proof | Add Vitest for any formula in docs/03..05 |
-| "Tests later" | Later = never; gates exist for a reason | Tests in same PR, CI must pass |
-| "Just one more file in this PR" | 300-line cap keeps review real | Split PR, reference task IDs |
-| "FPS is fine on my machine" | NFR-01 is on ref spec, not yours | Show F3 + draw-call HUD evidence |
-| "Save compat can break" | Players lose cities = trust lost | Bump version + write migration + test |
-| "Skip worker, main thread is OK" | 256² paths will blow 50ms budget | Measure with `npm run perf`, then decide |
+## VS-9 — Production Readiness (T-9xx)
+
+- [ ] **T-901 M — PWA offline.** Service worker + cache versioned + update prompt.
+- [ ] **T-902 M — A11y penuh.** Keyboard-only path + checklist NFR-05 signed.
+- [ ] **T-903 S — Crash recovery UX.** Tawaran recovery + tidak pernah hard-crash.
+- [ ] **T-904 S — Observability.** Telemetri perf opt-in + dashboard rilis.
+- [ ] **VS-9 GATE:** production checklist hijau.
+
+## Migrasi ID lama → baru
+
+| Lama (arsip) | Baru | Catatan |
+|---|---|---|
+| T-001..T-005 (M1) | T-101..T-103 + T-104..T-105 | Dipecah per VS-0/VS-1; semua `[x]` |
+| T-006..T-010 (M2) | T-106..T-109 | Semua `[x]` |
+| T-011..T-015 (M3) | T-202..T-208 subset + T-301..T-306 | **Belum dikerjakan** — tetap `[ ]` |
+| T-016..T-021 (M4) | T-401..T-407 | `[ ]` |
+| T-022..T-025 (M5) | T-303 + T-407 + T-110 + T-702 | T-110 `[x]` (save v1 dasar); sisanya `[ ]` |
+| T-026..T-030 (M6) | T-501..T-505 | `[ ]` |
+| T-031..T-037 (M7) | T-601..T-606 + T-701..T-704 | `[ ]` |
+| T-101..T-106 stretch (lama) | T-801..T-805 | dinomori ulang cegah tabrakan |

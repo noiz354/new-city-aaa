@@ -2,6 +2,8 @@
 
 > Living document (brief §maintenance): updated at every milestone commit.
 > Authority for *status*; specs in `docs/01..04`, roadmap in `development-roadmap.md`.
+> Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
+> Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
 - **Updated:** 2026-09-19 (Asia/Jakarta)
 - **HEAD:** VS-1 commit (see `git log`)

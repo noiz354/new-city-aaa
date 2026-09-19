@@ -1,5 +1,8 @@
 # Development Roadmap (dependency-aware vertical slices)
 
+> **SUBORDINAT.** Dokumen kanonis: **`../../roadmap.md`** (VS-0..VS-9). Bila bertentangan, `roadmap.md` menang.
+> File ini dipertahankan sebagai detail historis VS-0..VS-7.
+
 > Replaces prior M1–M7 phasing (kept as reference in `plan.md`). Rule: **no slice lands without its tests + budgets + visual inspection** ([definition-of-done](definition-of-done.md)). Dependencies visualized in [dependency-graph](dependency-graph.md); slice details in [vertical-slice-milestones](vertical-slice-milestones.md).
 
 | Slice | Name | Functional scope | Key arch decisions | Gate (must measure) |
