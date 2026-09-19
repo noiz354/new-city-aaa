@@ -11,7 +11,7 @@ import type {
 } from '../shared/types.js';
 import { fnv1aBytes } from '../shared/crc32.js';
 import { Buildings } from './buildings.js';
-import { Clock, TICKS_PER_DAY } from './clock.js';
+import { Clock, TICKS_PER_DAY, TICKS_PER_MONTH } from './clock.js';
 import { normalizeRect } from '../shared/grid.js';
 import { applyBulldoze, applyRoad, applyZone, validateBulldoze, validateRoad, validateZone } from './commands.js';
 import { Economy } from './economy.js';
@@ -19,6 +19,7 @@ import { Growth } from './growth.js';
 import { RoadAccess } from './road-access.js';
 import { Rng } from './rng.js';
 import { CHUNK } from '../shared/types.js';
+import { Upkeep } from './upkeep.js';
 import { World, type TerrainPreset } from './world.js';
 
 export interface SimOptions {
@@ -36,6 +37,7 @@ export class Sim {
   readonly buildings: Buildings; // T-201: authoritative building lifecycle store
   readonly growth: Growth; // T-202: daily scoring → spawn + move-in
   readonly roadAccess: RoadAccess; // T-204: canonical attachment flags (derived truth)
+  readonly upkeep: Upkeep; // T-205: monthly per-building/road upkeep (economy stage)
   private events: SimEvent[] = [];
 
   constructor(opts: SimOptions = {}) {
@@ -46,6 +48,7 @@ export class Sim {
     this.buildings = new Buildings(this.world);
     this.roadAccess = new RoadAccess(this.world);
     this.growth = new Growth(this.world, this.buildings, this.roadAccess);
+    this.upkeep = new Upkeep(this.world, this.buildings, this.economy);
   }
 
   update(realDtMs: number): void {
@@ -57,6 +60,11 @@ export class Sim {
     // then the daily growth pass at the day boundary (heavy systems on day boundaries only).
     this.buildings.onTick(tick);
     if (tick % TICKS_PER_DAY === 0) this.growth.onDay(tick);
+    // Economy stage AFTER growth (frozen order: … → growth → fields-commit → economy(monthly)).
+    if (tick % TICKS_PER_MONTH === 0 && tick > 0) {
+      const bill = this.upkeep.onMonth();
+      if (bill.net !== 0) this.events.push({ type: 'treasury-changed', balance: this.economy.balance });
+    }
   }
 
   execute(cmd: Command): CommandResult {

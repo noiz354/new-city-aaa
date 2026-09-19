@@ -5,9 +5,9 @@
 > Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
 > Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
-- **Updated:** 2026-09-19 #5 (Asia/Jakarta)
-- **HEAD:** T-204 view+docs commit (see `git log`)
-- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202/T-203/T-204 🔶 partial — visual evidence blocked).
+- **Updated:** 2026-09-19 #6 (Asia/Jakarta)
+- **HEAD:** T-205 upkeep commit (see `git log`)
+- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202..T-205 🔶 partial — visual evidence blocked).
 
 ## Slice status
 
@@ -15,8 +15,28 @@
 |-------|-------|----------|
 | VS-0 Scaffold | ✅ DONE | `evidence/vs0-smoke.png`, CI green, `perf/baseline.json` |
 | VS-1 First tile | ✅ DONE | `evidence/vs1-{boot,built,loaded,persp,bay}.png`, 47 unit + 6 E2E green, coverage 86.6/72.5/82.5 |
-| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ · T-202 🔶 (78 suite) · T-203 🔶 (85/85) · T-204 🔶 (101/101 suite, 11 sim + 5 layer tests) |
+| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ · T-202 🔶 (78 suite) · T-203 🔶 (85/85) · T-204 🔶 (101/101) · T-205 🔶 (111/111, 10 upkeep tests) |
 | VS-2b..VS-7 | ⬜ QUEUED | — |
+
+## T-205 notes (2026-09-19 #6)
+
+- `src/sim/upkeep.ts` + `tuning/upkeep.ts`: monthly per-building upkeep — kanonis docs/03-simulation-core
+  (Upkeep/mo R1..3=2/6/15, C=4/12/30, I=6/18/45) + docs/05 B1/B3/B6. Roads floor(N×½). Frontier subsidy
+  <500 pop → bayar floor(gross×7/10). Semua integer (B1 hukum). Economy stage pasca-growth per frozen order
+  §2 (`… → growth → fields-commit → economy(monthly) → events-out`); `TICKS_PER_MONTH=720` di clock.
+- Aturan observable (dok: silent → diputus & terdokumentasi di header): occupied+abandoned bayar;
+  construction bayar nol; bill DERIVED per pass (tak dipersist) — bulldoze menghentikan biaya pass berikutnya.
+  Debit via `economy.add(-net)` bukan `spend` — upkeep tak pernah di-block affordability; balance bisa
+  negatif (bankruptcy block = T-301). Event `treasury-changed` di-push saat net≠0 (HUD TopBar mengalir otomatis
+  via snapshot 250ms — tidak ada kode UI baru).
+- Scope guards: tax income = T-206/T-301; upkeep plant/air/servis datang bersama slice masing-masing (VS-3..VS-5).
+- RED-first: 7/10 gagal bermakna sebelum implementasi; 3 incidental (empty-city/determinism/load) tetap hijau.
+  Geografi test subsidy-tersingkir disetting 2 road paralel (semua lot ≤2 — aturan T-204 berlaku).
+- **Verifikasi:** suite 111/111 (upkeep 10: parts kanonis, 17 tepat bersubsidi, 297 penuh ≥500 pop dgn 135 rumah,
+  event, negatif-boleh, bulldoze-stop, hash-deterministik, load parity) · lint 0 · typecheck 0 · arch OK 59 ·
+  build pass · perf dalam budget. HUD screenshot: BLOCKED lingkungan (identik T-202..T-204).
+- Skills dipakai: `city-builder-simulation-audit` (invariant money integer-exact §3, frozen tick order),
+  `tdd` (RED→GREEN, seam = Sim snapshot/drainEvents + monthlyBill).
 
 ## T-204 notes (2026-09-19 #5)
 

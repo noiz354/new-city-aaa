@@ -85,6 +85,17 @@
     playwright.config disinkronkan ke port 5180 dev aktual). Unblock: mesin/CI ber-browser.
 - [ ] **T-205 M — Upkeep tick.** Upkeep bulanan per bangunan; treasury berkurang terukur + unit test.
   `Deps: T-202` · `Accept: month tick mengubah $ benar.` · `Evidence: test log + HUD.` · `Skills: city-builder-simulation-audit, tdd`
+  - **Status: PARTIAL (2026-09-19).** "month tick mengubah $ benar" TERBUKTI di test log: `src/sim/upkeep.ts`
+    (economy stage pasca-growth per frozen order §2), tabel kanonis `tuning/upkeep.ts` (R1/2/3=2/6/15,
+    C=4/12/30, I=6/18/45 — docs/03-simulation-core; roads floor(N×½) — B3; Frontier subsidy floor(gross×7/10)
+    saat pop<500 — B6; integer hukum B1; balance boleh negatif, bankruptcy-block=T-301). Occupied+abandoned
+    bayar; construction gratis; zona vacant gratis (B3); bill derived tiap pass (tanpa persist). 10 test hijau:
+    parts kanonis, billed exactly 17 (10×R1+10 roads, subsidy), subsidy hilang di ≥500 pop (297 penuh,
+    135 rumah), bulldoze menghentikan biaya, event `treasury-changed`, determinisme hash, load/save parity.
+    Suite 111/111; lint/arch/typecheck/build bersih.
+  - **Remaining:** bukti visual HUD (angka treasury berkurang tiap bulan di TopBar — wiring sudah mengalir
+    via snapshot 250ms, tak butuh kode baru). **Blocker: lingkungan** (sama dgn T-202..T-204: tanpa browser).
+    Unblock: mesin/CI ber-browser.
 - [ ] **T-206 M — RCI demand v0.** Demand −100..+100 dari unemployment/happiness/tax; RCI bar HUD merespons.
   `Deps: T-205` · `Accept: 80% branch coverage fungsi demand.` · `Evidence: vitest log.` · `Skills: city-builder-simulation-audit, tdd`
 - [ ] **T-207 M — Land value v0 + desirability.** Base − pollution + halo park/air; difusi 3×3; overlay.

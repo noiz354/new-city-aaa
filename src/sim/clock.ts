@@ -7,6 +7,8 @@ export const TICKS_PER_SECOND: Record<Speed, number> = { 0: 0, 1: 2, 2: 6, 3: 12
 export const TICKS_PER_DAY = 24;
 export const DAYS_PER_MONTH = 30;
 export const MONTHS_PER_YEAR = 12;
+/** T-205: monthly heavy-stage boundary (economy stage, simulation-architecture §1/§2). */
+export const TICKS_PER_MONTH = TICKS_PER_DAY * DAYS_PER_MONTH;
 
 export interface ClockState {
   tick: number;
