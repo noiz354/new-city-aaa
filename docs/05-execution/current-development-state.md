@@ -5,9 +5,9 @@
 > Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
 > Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
-- **Updated:** 2026-09-19 #3 (Asia/Jakarta)
-- **HEAD:** T-202 commit (see `git log`)
-- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202 🔶 partial, T-203 next).
+- **Updated:** 2026-09-19 #4 (Asia/Jakarta)
+- **HEAD:** T-203 commit (see `git log`)
+- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202/T-203 🔶 partial — visual evidence blocked).
 
 ## Slice status
 
@@ -15,8 +15,21 @@
 |-------|-------|----------|
 | VS-0 Scaffold | ✅ DONE | `evidence/vs0-smoke.png`, CI green, `perf/baseline.json` |
 | VS-1 First tile | ✅ DONE | `evidence/vs1-{boot,built,loaded,persp,bay}.png`, 47 unit + 6 E2E green, coverage 86.6/72.5/82.5 |
-| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ 19 tests · T-202 🔶 78/78 suite, hash-equal round-trip, dayP95 0.716ms |
+| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ · T-202 🔶 (78 suite) · T-203 🔶 (85/85 suite, 7 headless layer tests) |
 | VS-2b..VS-7 | ⬜ QUEUED | — |
+
+## T-203 notes (2026-09-19 #4)
+
+- `src/view/buildings.ts` (BuildingLayer): 2 draw call konstan (scaffold + house procedural
+  walls+hip-roof merge), mapping state→mesh: construction=scaffold, occupied=house terang,
+  abandoned=house gelap (tetap 1 instance), demolish=swap-remove dense. `apply()` delta dari
+  event, `sync()` rebuild dari save (boot/load), capacity grow ×2. View tetap proyeksi murni.
+- Wiring: `view.applyEvents(sim.drainEvents())` tiap frame di `main.ts`; `view.syncBuildings` pasca-load.
+- Verifikasi: 85/85 unit (7 headless BuildingLayer: tile position, denseness, grow, sync idempoten,
+  2-mesh bound) · typecheck 0 · lint 0 · arch OK 52 · build 828.03kB/226.61kB gzip · dev 200 OK
+  (page + transform buildings.ts + addons rewrite). Screenshot/visual: BLOCKED (lingkungan, lih. bawah).
+- Skills dipakai: `three-best-practices` (instancing/disposal/frustum), `tdd`, `city-builder-simulation-audit`.
+  Inspector "growth blocked" reasons: seam siap (`growth.growthBlockReason`), konsumsi di T-204.
 
 ## T-202 notes (2026-09-19 #3)
 

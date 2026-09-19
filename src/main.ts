@@ -68,6 +68,7 @@ async function boot(): Promise<void> {
     const dec = decodeSave(bytes);
     sim.loadState(dec.meta, dec.layers, dec.entities ?? undefined);
     view.setWorld(sim.world);
+    view.syncBuildings(sim.buildings.serialize().slots);
     store.world = sim.world;
     store.set({ snapshot: sim.snapshot(), selectedTile: null });
     store.toast(`Loaded ${slot}${dec.repairs.length > 0 ? ` (${dec.repairs.length} repairs)` : ''}`);
@@ -109,7 +110,7 @@ async function boot(): Promise<void> {
     if (!document.hidden) {
       const t0 = performance.now();
       sim.update(frameMs);
-      sim.drainEvents(); // VS-1: UI polls snapshots; drain bounds queue growth
+      view.applyEvents(sim.drainEvents()); // T-203: building deltas flow into the projection
       simMs = performance.now() - t0;
       snapAcc += frameMs;
       if (snapAcc >= 250) {

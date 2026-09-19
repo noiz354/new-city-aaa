@@ -62,6 +62,13 @@
     Dev server 200 OK (root+modul, preview host) terverifikasi via curl. Unblock: mesin/CI ber-browser.
 - [ ] **T-203 M — Visual rumah + instancing.** Procedural house mesh + InstancedMesh swap saat spawn; 0 crash bila aset hilang.
   `Deps: T-202` · `Accept: rumah terlihat di tile tumbuh.` · `Evidence: screenshot.` · `Skills: three-best-practices, city-builder-visual-qa`
+  - **Status: PARTIAL (2026-09-19).** `src/view/buildings.ts`: 2 InstancedMesh (scaffold/house procedural,
+    tint abandoned, swap-remove dense, capacity grow ×2, rotasi fasad deterministik) — murni proyeksi state sim
+    (deltas via `building-changed`, rebuild via `sync`), nol aset eksternal (crash-by-missing-asset mustahil by
+    construction). Wiring `view.ts` + `main.ts`; 7 unit test headless (positions/denseness/grow/sync idempoten/2 draws);
+    suite 85/85; build 828KB/226.6KB gzip; dev 200 OK.
+  - **Remaining:** screenshot "rumah terlihat di tile tumbuh". **Blocker: lingkungan** (sama dgn T-202:
+    tanpa browser + CDN Playwright ECONNRESET). Unblock: mesin/CI ber-browser.
 - [ ] **T-204 M — Road-access rule.** Tanpa path → ikon "No road connection", growth berhenti.
   `Deps: T-202` · `Accept: zona terisolasi tidak tumbuh + ikon tampil.` · `Evidence: screenshot.` · `Skills: city-builder-simulation-audit`
 - [ ] **T-205 M — Upkeep tick.** Upkeep bulanan per bangunan; treasury berkurang terukur + unit test.
