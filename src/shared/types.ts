@@ -100,6 +100,10 @@ export interface SimSnapshot {
   population: number;
   /** T-206 FR-S02: RCI demand ∈ [−100,100], integer-rounded for the HUD bars. */
   demand: { r: number; c: number; i: number };
+  /** T-208 FR-U02 cohort-vs-jobs readout: 0 by canonical ledger — model lands with T-305. */
+  jobs: number;
+  /** T-208 FR-U02: fraction currently unemployed ∈ [0,1]; same T-305 ledger ⇒ 0. */
+  unemployment: number;
   size: number;
   seed: number;
   paused: boolean;

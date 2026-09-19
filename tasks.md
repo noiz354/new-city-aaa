@@ -127,9 +127,17 @@
     toggle <-> store V-key/TopBar; refresh 4Hz hanya saat visible diikat pump snapshot). **Blocker:
     lingkungan** (tanpa browser) — identik VS-2a.
   - Skills: `city-builder-simulation-audit`; perf-gate temuan: cost harian penuh (dihindari via static split).
-- [ ] **T-208 S — HUD pop/RCI(p4).** Populasi + RCI bar + jobs + unemployment selalu terlihat; update 4Hz.
+- [x] **T-208 S — HUD pop/RCI(p4).** Populasi + RCI bar + jobs + unemployment selalu terlihat; update 4Hz. **PARTIAL**
   `Deps: T-206` · `Accept: angka berubah saat kota tumbuh.` · `Evidence: HUD screenshot.` · `Skills: frontend-ui-engineering`
+  - **Status: engine-complete 2026-09-19, visual evidence blocked.** TopBar kini `Pop {n} · Jobs {n} · Unemp {n}%`
+    (FR-U02 layout doc UI §1) + strip RCI T-206; angka ikut kota tumbuh via pump snapshot 250 ms (4Hz — diverifikasi);
+    jobs/unemployment 0 konstan PENUH intentional (ledger demand.ts: cohort/jobs model = T-305); render-test
+    memastikan angka tumbuh muncul (→132 tests; glob vitest diperluas untuk .test.tsx).
+  - **Remaining:** screenshot. **Blocker: lingkungan** (tanpa browser) — identik VS-2a.
 - [ ] **VS-2 GATE:** UJ-01 + UJ-02 partial (rumah/shop spawn, pop tumbuh, $ tick).
+  - **ENGINE-COMPLETE 2026-09-19 (visual gate blocked lingkungan):** shop spawn + $ monthly tick +
+    pop≥25 KEDUANYA tercapai di growth determinisme test + upkeep test. Bermuara final: save/format intact,
+    persistence round-trip hijau, 132/132 suite, perf 0.74ms/day p95.
 
 ## VS-3 — Economy That Bites (T-3xx)
 

@@ -33,7 +33,7 @@ export function TopBar({
         {money(snapshot.balance)}
       </span>
       <span className="stat dim" title="Population">
-        Pop {snapshot.population.toLocaleString('en-US')}
+        Pop {snapshot.population.toLocaleString('en-US')} · Jobs {snapshot.jobs.toLocaleString('en-US')} · Unemp {(snapshot.unemployment * 100).toFixed(0)}%
       </span>
       {/* T-206 FR-S02: the canonical RCI bars mirror sim.demand (sim truth, no UI kernel). */}
       <span className="rci" role="group" aria-label="RCI demand">

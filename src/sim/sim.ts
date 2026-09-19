@@ -182,6 +182,9 @@ export class Sim {
         c: Math.round(this.demand.target().c),
         i: Math.round(this.demand.target().i),
       },
+      // T-208: jobs/unemployment 0 per demand.ts's T-305 cohort ledger (visible-but-honest zeros).
+      jobs: 0,
+      unemployment: 0,
       size: this.world.size,
       seed: this.world.seed,
       paused: this.clock.paused,
