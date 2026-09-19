@@ -93,6 +93,13 @@ export interface SaveEntities {
   slots: BuildingSlotData[];
 }
 
+/** One settled month as the HUD sees it (all integers; sim/economy.ts MonthEntry mirrors it). */
+export interface MonthLedger {
+  income: number;
+  expense: number;
+  subsidy: number;
+}
+
 export interface SimSnapshot {
   tick: number;
   date: SimDate;
@@ -106,10 +113,13 @@ export interface SimSnapshot {
   unemployment: number;
   /** T-301 docs/02 §4: balance < −$5,000 — paid commands blocked, budget modal forced. */
   bankrupt: boolean;
-  /** T-301: last settled month, drives the budget panel sparkline (T-303) later. */
-  lastMonth: { income: number; expense: number };
+  /**
+   * T-301: last settled month. expense = gross upkeep; subsidy = the Frontier safety-net part
+   * of it the city did NOT pay (docs/02 §4, pop < 500). Treasury delta ≡ income − expense + subsidy.
+   */
+  lastMonth: MonthLedger;
   /** T-303 docs/02 §4: trailing months, oldest → newest (≤12), recomputable derived data. */
-  history: { income: number; expense: number }[];
+  history: MonthLedger[];
   size: number;
   seed: number;
   paused: boolean;

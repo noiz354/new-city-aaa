@@ -13,7 +13,7 @@ function snap(over: Partial<SimSnapshot>): SimSnapshot {
     jobs: 0,
     unemployment: 0,
     bankrupt: false,
-    lastMonth: { income: 0, expense: 0 },
+    lastMonth: { income: 0, expense: 0, subsidy: 0 },
     history: [],
     size: 64,
     seed: 1,
@@ -29,11 +29,11 @@ describe('T-303 FR-U05 — budget panel renders the sim ledger (kernel is empty)
     const html = renderToStaticMarkup(
       <BudgetPanel
         snapshot={snap({
-          lastMonth: { income: 23, expense: 27 },
+          lastMonth: { income: 23, expense: 27, subsidy: 8 },
           history: [
-            { income: 23, expense: 27 },
-            { income: 46, expense: 27 },
-            { income: 69, expense: 30 },
+            { income: 23, expense: 27, subsidy: 8 },
+            { income: 46, expense: 27, subsidy: 8 },
+            { income: 69, expense: 30, subsidy: 0 },
           ],
         })}
         onClose={() => {}}
@@ -42,8 +42,11 @@ describe('T-303 FR-U05 — budget panel renders the sim ledger (kernel is empty)
     expect(html).toContain('Tax income');
     expect(html).toContain('+$23');
     expect(html).toContain('−$27');
+    expect(html).toContain('Frontier subsidy');
+    expect(html).toContain('+$8');
     expect(html).toContain('Net');
-    expect(html).toContain('−$4'); // 23 − 27 kept honest and red
+    expect(html).toContain('+$4'); // 23 − 27 + 8 = the treasury's real movement (subsidy is not paid)
+    expect(html).not.toContain('−$4'); // the pre-fix figure (income − gross) overstated the loss
     expect(html).toContain('sparkline');
     expect((html.match(/<rect/g) ?? []).length).toBe(3 * 2); // one income bar + one expense bar per month
     // Engine-side exactness (history content equals the settled ledger) is covered by

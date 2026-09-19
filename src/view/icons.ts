@@ -6,6 +6,7 @@
 // so it cannot violate the no-new-lights constraint. Keyed by tile index; dense swap-remove.
 import * as THREE from 'three';
 import type { TilePos } from '../shared/types.js';
+import { expandInstanceBounds, refreshInstanceBounds } from './instancing.js';
 
 /** Minimal geometry facts the layer needs (structurally satisfied by WorldView). */
 export interface IconGeo {
@@ -45,6 +46,11 @@ export class BlockedIconLayer {
     return this.keys.length;
   }
 
+  /** Live instanced mesh (tests: culling bounds; swaps on capacity growth). */
+  get instancedMesh(): THREE.InstancedMesh {
+    return this.mesh;
+  }
+
   has(x: number, y: number): boolean {
     return this.indexOf.has(y * this.size + x);
   }
@@ -61,6 +67,7 @@ export class BlockedIconLayer {
     this.indexOf.clear();
     this.mesh.count = 0;
     for (const t of blocked) this.add(t.x, t.y);
+    refreshInstanceBounds(this.mesh); // stale markers no longer stretch the culling sphere
   }
 
   dispose(): void {
@@ -93,6 +100,7 @@ export class BlockedIconLayer {
     this.mesh.setMatrixAt(index, m);
     this.mesh.count = this.keys.length;
     this.mesh.instanceMatrix.needsUpdate = true;
+    expandInstanceBounds(this.mesh, m); // culling sphere must include the new marker
   }
 
   private remove(key: number): void {
@@ -111,6 +119,7 @@ export class BlockedIconLayer {
     this.indexOf.delete(key);
     this.mesh.count = this.keys.length;
     this.mesh.instanceMatrix.needsUpdate = true;
+    refreshInstanceBounds(this.mesh);
   }
 
   private grow(): void {
@@ -122,6 +131,7 @@ export class BlockedIconLayer {
       next.setMatrixAt(i, m);
     }
     next.count = this.keys.length;
+    refreshInstanceBounds(next);
     this.group.remove(this.mesh);
     this.mesh.dispose();
     this.mesh = next;

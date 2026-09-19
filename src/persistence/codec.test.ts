@@ -90,6 +90,10 @@ describe('codec', () => {
     sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined);
     expect(sim2.hash()).toBe(hashA);
     expect(sim2.snapshot().population).toBe(sim.snapshot().population);
+    // Derived RCI demand is rebuilt at load (popFactor moved C off its bootstrap value); growth
+    // reads it before the next daily recompute, so a stale vector would also break continuation.
+    expect(sim2.demand.target()).toEqual(sim.demand.target());
+    expect(sim.demand.target().c).not.toBe(new Sim({ size: 64, seed: 1, preset: 'plains' }).demand.target().c); // guard: pop moved it
     // save/continue equivalence still holds with entities in the hash
     runDays(sim, 3);
     runDays(sim2, 3);

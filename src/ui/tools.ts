@@ -126,6 +126,7 @@ export class ToolController {
       this.actions.toggleBudget(); // T-303: budget panel
     } else if (e.code === 'Escape') {
       if (this.drag) this.cancelDrag();
+      else if (this.store.getState().budgetOpen) this.actions.toggleBudget(); // modal first (T-303)
       else this.store.set({ selectedTile: null });
     }
   }

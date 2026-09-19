@@ -27,7 +27,7 @@ async function boot(page: Page): Promise<string[]> {
 test('city boots: terrain canvas, HUD, F3, no errors', async ({ page }) => {
   const errors = await boot(page);
   await expect(page.locator('.toolbar')).toBeVisible();
-  await expect(page.locator('#f3-overlay')).toContainText(/fps \d+/);
+  await expect(page.locator('#f3-overlay')).toContainText(/fps \d+/, { timeout: 30_000 }); // first paint waits on shader compile (slow under SwiftShader)
   expect(errors).toEqual([]);
   await page.waitForTimeout(800);
   await page.screenshot({ path: 'test-results/vs1-boot.png' });

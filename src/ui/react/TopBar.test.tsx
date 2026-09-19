@@ -17,7 +17,7 @@ function snap(over: Partial<SimSnapshot>): SimSnapshot {
       jobs: 0,
       unemployment: 0,
       bankrupt: false,
-      lastMonth: { income: 0, expense: 0 },
+      lastMonth: { income: 0, expense: 0, subsidy: 0 },
       history: [],
       size: 64,
       seed: 1,
