@@ -156,3 +156,16 @@
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 40; }
 .modal { max-width: 380px; padding: 14px 18px; }
 .modal h2 { margin: 0 0 8px; }
+
+/* T-303: budget panel */
+.budget-panel { min-width: 320px; }
+.budget-head { display: flex; justify-content: space-between; align-items: center; }
+.budget-table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; }
+.budget-table td { padding: 3px 0; }
+.budget-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.budget-table .total td { border-top: 1px solid var(--line, #333); font-weight: 700; }
+.budget-panel .pos { color: #6fec9b; } .budget-panel .neg { color: #f37b6b; }
+.spark { border: 1px solid var(--line, #333); border-radius: 3px; display: block; }
+.spark .bar-inc { fill: #3fbf6f; } .spark .bar-exp { fill: #d95a4a; }
+.spark text { fill: #9aa; font-size: 10px; }
+.budget-note { font-size: 11px; margin: 8px 0 0; }

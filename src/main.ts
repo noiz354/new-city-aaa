@@ -98,6 +98,7 @@ async function boot(): Promise<void> {
       view.attachFields(sim.fields, next);
       store.set({ valueOverlay: next });
     },
+    toggleBudget: () => store.set({ budgetOpen: !store.getState().budgetOpen }), // T-303
     // T-204 FR-C06: sim-owned blocking reason for the Inspector (growth.growthBlockReason
     // probe; icon layer is the visual twin — both read the same attachment truth).
     growthBlockReason: (x, y) => sim.growth.growthBlockReason(x, y),

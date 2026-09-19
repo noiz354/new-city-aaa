@@ -155,8 +155,14 @@
   - **Note:** service funding (slider 50/100/150%) milik T-303; tax-rate persist ikut T-302 (§9-format).
 - [ ] **T-302 M — Slider pajak R/C/I.** 0–20% (default 9%); income = Σ level×rate×happinessFactor.
   `Deps: T-301` · `Accept: 15% → income↑ happiness↓ (UJ-05 partial).` · `Evidence: screenshot + test.` · `Skills: frontend-ui-engineering`
-- [ ] **T-303 M — Budget panel.** Breakdown income/expense + sparkline 12 bulan + slider funding service.
+- [x] **T-303 M — Budget panel.** Breakdown income/expense + sparkline 12 bulan + slider funding service. **PARTIAL**
   `Deps: T-301` · `Accept: panel akurat vs sim.` · `Evidence: screenshot.` · `Skills: vercel-react-best-practices, frontend-ui-engineering`
+  - **Status: engine-complete 2026-09-19.** `BudgetPanel.tsx` (panel atas modal): breakdown exact dari
+    `snapshot.lastMonth` (UI kernel kosong), sparkline SVG ≤12 bulan (2 bar/bln, right-edge = newest),
+    tombol B/Escape/close, placeholder funding-slider documented sebagai service-era (VS-5 — service
+    belum ada era ini; funding·scale outputs/radii menempel ke services di docs/02 §4) + T-302 tax slider
+    note. Render-test memastikan angka persis + jumlah bar = 2×history (sign −$ diformat benar).
+  - **Remaining:** screenshot evidence. **Blocker: lingkungan** (tanpa browser) — identik VS-2a.
 - [ ] **T-304 M — RCI demand matang.** Bobot unemployment/happiness/land/tax final + unit test.
   `Deps: T-302` · `Accept: R+C+I → unemployment <20%.` · `Evidence: HUD screenshot.` · `Skills: city-builder-simulation-audit`
 - [ ] **T-305 M — Citizens + jobs (cohort).** Resident/job count, gravity match, unemployment + happiness.

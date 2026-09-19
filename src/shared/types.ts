@@ -108,6 +108,8 @@ export interface SimSnapshot {
   bankrupt: boolean;
   /** T-301: last settled month, drives the budget panel sparkline (T-303) later. */
   lastMonth: { income: number; expense: number };
+  /** T-303 docs/02 §4: trailing months, oldest → newest (≤12), recomputable derived data. */
+  history: { income: number; expense: number }[];
   size: number;
   seed: number;
   paused: boolean;

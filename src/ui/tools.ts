@@ -33,7 +33,7 @@ export class ToolController {
     private readonly view: View,
     private readonly store: UiStore,
     private readonly host: CommandHost,
-    private readonly actions: Pick<UiActions, 'setTool' | 'togglePause' | 'toggleCamera' | 'toggleValueOverlay'>,
+    private readonly actions: Pick<UiActions, 'setTool' | 'togglePause' | 'toggleCamera' | 'toggleValueOverlay' | 'toggleBudget'>,
   ) {
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     window.addEventListener('pointermove', (e) => this.onMove(e));
@@ -122,6 +122,8 @@ export class ToolController {
       this.actions.toggleCamera();
     } else if (e.code === 'KeyV') {
       this.actions.toggleValueOverlay(); // T-207: land-value gradient overlay
+    } else if (e.code === 'KeyB') {
+      this.actions.toggleBudget(); // T-303: budget panel
     } else if (e.code === 'Escape') {
       if (this.drag) this.cancelDrag();
       else this.store.set({ selectedTile: null });

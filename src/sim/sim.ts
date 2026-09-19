@@ -198,6 +198,7 @@ export class Sim {
         const m = this.economy.lastMonth();
         return { income: m.income, expense: m.expense };
       })(),
+      history: this.economy.history().map((m) => ({ income: m.income, expense: m.expense })),
       size: this.world.size,
       seed: this.world.seed,
       paused: this.clock.paused,
