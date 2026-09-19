@@ -13,12 +13,16 @@ import {
 import { Sim } from './sim.js';
 import { World } from './world.js';
 
-/** Road at y=10 + three R lots above it, placed through real commands. */
-function buildTown(): Sim {
+/**
+ * Road at y=10 + R lots above it, placed through real commands. `lots` limits the painted
+ * lots so tests that advance days control exactly which lots the growth engine may claim
+ * (T-202 spawns daily on any eligible vacant lot).
+ */
+function buildTown(lots = 3): Sim {
   const sim = new Sim({ seed: 7, size: 64, preset: 'plains' });
   const road = sim.execute({ kind: 'place-road', path: [{ x: 10, y: 10 }, { x: 11, y: 10 }, { x: 12, y: 10 }] });
   if (!road.ok) throw new Error(road.reason);
-  const zone = sim.execute({ kind: 'paint-zone', rect: { x0: 10, y0: 9, x1: 12, y1: 9 }, zone: 1 });
+  const zone = sim.execute({ kind: 'paint-zone', rect: { x0: 10, y0: 9, x1: 9 + lots, y1: 9 }, zone: 1 });
   if (!zone.ok) throw new Error(zone.reason);
   return sim;
 }
@@ -213,9 +217,9 @@ describe('Buildings: demolish (any state → vacant) + slot reuse', () => {
 
 describe('Sim integration (tick path, repaint rule, population, hash, load)', () => {
   it('sim ticks complete construction on schedule with no side effects', () => {
-    const sim = buildTown();
+    const sim = buildTown(1); // single lot: growth finds no other candidate while days pass
     const tick0 = sim.clock.tick; // 0: commands do not advance the clock
-    const house = sim.buildings.startConstruction(11, 9, tick0)!;
+    const house = sim.buildings.startConstruction(10, 9, tick0)!;
     const zonesBefore = sim.world.zone.slice();
     // 1x speed = 2 ticks/s → one 250ms update banks 0.5 tick; 142 updates = 71 ticks
     for (let i = 0; i < 2 * (CONSTRUCTION_TICKS - 1); i++) sim.update(250);
@@ -229,7 +233,7 @@ describe('Sim integration (tick path, repaint rule, population, hash, load)', ()
     expect(house.stateSinceTick).toBe(CONSTRUCTION_TICKS);
     expect(sim.buildings.count).toBe(1);
     expect(sim.world.zone).toEqual(zonesBefore);
-    expect(sim.world.counts.zonesR).toBe(3);
+    expect(sim.world.counts.zonesR).toBe(1);
   });
 
   it('repainting skips lots that hold a building (zone validity: not occupied)', () => {
@@ -245,9 +249,9 @@ describe('Sim integration (tick path, repaint rule, population, hash, load)', ()
   });
 
   it('snapshot population derives from occupied buildings only', () => {
-    const sim = buildTown();
+    const sim = buildTown(2); // both lots claimed manually: growth has nowhere else to build
     const h1 = sim.buildings.startConstruction(10, 9, sim.clock.tick)!;
-    const h2 = sim.buildings.startConstruction(12, 9, sim.clock.tick)!;
+    const h2 = sim.buildings.startConstruction(11, 9, sim.clock.tick)!;
     expect(sim.snapshot().population).toBe(0); // still under construction
     runDays(sim, 4); // > 3 construction days
     sim.buildings.setOccupants(h1.id, 5);
@@ -273,16 +277,31 @@ describe('Sim integration (tick path, repaint rule, population, hash, load)', ()
     expect(noHouse.hash()).not.toBe(a.hash());
   });
 
-  it('loadState clears stale building state until entity persistence lands (T-202)', () => {
+  it('loadState without an entity section clears stale building state (pre-T-202 default)', () => {
     const a = buildTown();
     a.buildings.startConstruction(11, 9, a.clock.tick);
     runDays(a, 4);
     const dec = decodeSave(encodeSave(a));
     const b = new Sim({ seed: 7, size: 64, preset: 'plains' });
-    b.loadState(dec.meta, dec.layers);
+    b.loadState(dec.meta, dec.layers); // entities omitted: the pre-T-202 decoder default
     expect(b.buildings.count).toBe(0); // no stale records survive a load
     expect(b.buildings.stateAt(11, 9)).toBe(LOT_VACANT);
     expect(b.snapshot().population).toBe(0);
     expect(b.world.counts.zonesR).toBe(3); // zones themselves restore fine
+  });
+
+  it('loadState with the entity section restores buildings and their tile links', () => {
+    const a = buildTown(1); // single lot: no surprise growth spawns changing expectations
+    const house = a.buildings.startConstruction(10, 9, a.clock.tick)!;
+    runDays(a, 4); // occupied + move-in
+    a.buildings.setOccupants(house.id, 5);
+    const hashA = a.hash();
+    const dec = decodeSave(encodeSave(a));
+    const b = new Sim({ seed: 7, size: 64, preset: 'plains' });
+    b.loadState(dec.meta, dec.layers, dec.entities ?? undefined);
+    expect(b.hash()).toBe(hashA);
+    expect(b.buildings.stateAt(10, 9)).toBe(BUILDING_OCCUPIED);
+    expect(b.world.building[b.world.idx(10, 9)]).toBeGreaterThanOrEqual(0);
+    expect(b.snapshot().population).toBe(5);
   });
 });

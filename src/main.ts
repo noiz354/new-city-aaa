@@ -66,7 +66,7 @@ async function boot(): Promise<void> {
       return;
     }
     const dec = decodeSave(bytes);
-    sim.loadState(dec.meta, dec.layers);
+    sim.loadState(dec.meta, dec.layers, dec.entities ?? undefined);
     view.setWorld(sim.world);
     store.world = sim.world;
     store.set({ snapshot: sim.snapshot(), selectedTile: null });

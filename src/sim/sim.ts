@@ -3,6 +3,7 @@
 import type {
   Command,
   CommandResult,
+  SaveEntities,
   SaveLayers,
   SaveMeta,
   SimEvent,
@@ -10,10 +11,11 @@ import type {
 } from '../shared/types.js';
 import { fnv1aBytes } from '../shared/crc32.js';
 import { Buildings } from './buildings.js';
-import { Clock } from './clock.js';
+import { Clock, TICKS_PER_DAY } from './clock.js';
 import { normalizeRect } from '../shared/grid.js';
 import { applyBulldoze, applyRoad, applyZone, validateBulldoze, validateRoad, validateZone } from './commands.js';
 import { Economy } from './economy.js';
+import { Growth } from './growth.js';
 import { Rng } from './rng.js';
 import { CHUNK } from '../shared/types.js';
 import { World, type TerrainPreset } from './world.js';
@@ -31,6 +33,7 @@ export class Sim {
   readonly economy: Economy;
   readonly rng: Rng;
   readonly buildings: Buildings; // T-201: authoritative building lifecycle store
+  readonly growth: Growth; // T-202: daily scoring → spawn + move-in
   private events: SimEvent[] = [];
 
   constructor(opts: SimOptions = {}) {
@@ -39,6 +42,7 @@ export class Sim {
     this.economy = new Economy();
     this.rng = new Rng(this.world.seed ^ 0x51ed2709);
     this.buildings = new Buildings(this.world);
+    this.growth = new Growth(this.world, this.buildings);
   }
 
   update(realDtMs: number): void {
@@ -46,8 +50,10 @@ export class Sim {
   }
 
   protected onTick(tick: number): void {
-    // Frozen tick order (simulation-architecture §2): growth stage drives lifecycle timers.
+    // Frozen tick order (simulation-architecture §2): growth stage. Lifecycle timers first,
+    // then the daily growth pass at the day boundary (heavy systems on day boundaries only).
     this.buildings.onTick(tick);
+    if (tick % TICKS_PER_DAY === 0) this.growth.onDay(tick);
   }
 
   execute(cmd: Command): CommandResult {
@@ -120,6 +126,9 @@ export class Sim {
   }
 
   drainEvents(): SimEvent[] {
+    for (const c of this.buildings.drainChanges()) {
+      this.events.push({ type: 'building-changed', id: c.id, x: c.x, y: c.y, state: c.state });
+    }
     const out = this.events;
     this.events = [];
     return out;
@@ -158,12 +167,17 @@ export class Sim {
     return this.world.toLayers();
   }
 
-  loadState(meta: SaveMeta, layers: SaveLayers): void {
+  getSaveEntities(): SaveEntities {
+    return this.buildings.serialize();
+  }
+
+  loadState(meta: SaveMeta, layers: SaveLayers, entities?: SaveEntities): void {
     if (meta.worldSize !== this.world.size) {
       throw new Error(`save size ${meta.worldSize} != world size ${this.world.size} (resize unsupported)`);
     }
     this.world.loadLayers(layers, meta.worldSeed);
-    this.buildings.reset(); // entity persistence lands in T-202 (codec section 4); never keep stale records
+    if (entities !== undefined) this.buildings.deserialize(entities);
+    else this.buildings.reset(); // pre-T-202 saves carry no entity section → restore empty (repair note)
     const speed = meta.speed === 0 || meta.speed === 1 || meta.speed === 2 || meta.speed === 3 ? meta.speed : 1;
     this.clock.setState({ tick: meta.tick, accumulator: meta.accumulator, speed });
     this.economy.balance = meta.balance;

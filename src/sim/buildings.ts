@@ -20,11 +20,12 @@
 // Store is AoS entities (identity matters, 10k-scale); world layers stay SoA. No RNG, no wall clock:
 // transitions are driven by explicit calls + sim ticks, so identical input sequences are deterministic.
 //
-// Persistence (FR-P01): entity section rides the save codec from T-202 (new optional section id 4;
-// unknown sections are already skipped by older decoders — see persistence/codec.ts). Until then
-// loadState resets the store to empty; the determinism hash below already covers building state.
+// Persistence (FR-P01, landed T-202): codec section 4 (sver 1) stores per-slot data so stable
+// ids survive save/load; older saves lack the section → loadState restores empty (repair note);
+// older decoders skip the unknown section gracefully. The determinism hash covers the same state.
+import { assert } from '../shared/assert.js';
 import { fnv1aBytes } from '../shared/crc32.js';
-import type { ZoneId } from '../shared/types.js';
+import type { SaveEntities, ZoneId } from '../shared/types.js';
 import { BUILDING_TUNING } from './tuning/buildings.js';
 import type { World } from './world.js';
 
@@ -55,11 +56,20 @@ export interface Building {
   stateSinceTick: number;
 }
 
+/** Lifecycle mutation notice; Sim republishes these as 'building-changed' SimEvents. */
+export interface BuildingChange {
+  id: number;
+  x: number;
+  y: number;
+  state: LotState;
+}
+
 export class Buildings {
   private readonly world: World;
   private readonly records: Building[] = [];
   private readonly free: number[] = []; // reusable slot ids of demolished buildings
   private pending = 0; // lots under construction (fast no-op guard for onTick)
+  private changes: BuildingChange[] = [];
 
   constructor(world: World) {
     this.world = world;
@@ -73,6 +83,13 @@ export class Buildings {
   get(id: number): Building | undefined {
     const b = this.records[id];
     return b !== undefined && b.state !== LOT_VACANT ? b : undefined;
+  }
+
+  /** Iterate every standing building in deterministic id order (tombstones skipped). */
+  forEachLive(cb: (b: Building) => void): void {
+    for (const b of this.records) {
+      if (b.state !== LOT_VACANT) cb(b);
+    }
   }
 
   /** Lifecycle state of the lot at (x, y); out-of-bounds reads as VACANT. */
@@ -105,6 +122,7 @@ export class Buildings {
     this.records[id] = building;
     w.building[i] = id;
     this.pending++;
+    this.changes.push({ id, x, y, state: BUILDING_CONSTRUCTION });
     return building;
   }
 
@@ -120,6 +138,7 @@ export class Buildings {
         b.state = BUILDING_OCCUPIED;
         b.stateSinceTick = tick;
         this.pending--;
+        this.changes.push({ id: b.id, x: b.x, y: b.y, state: BUILDING_OCCUPIED });
       }
     }
   }
@@ -140,6 +159,7 @@ export class Buildings {
     b.state = to;
     b.stateSinceTick = tick;
     if (to === BUILDING_ABANDONED) b.occupants = 0; // invariant: occupants only while occupied
+    this.changes.push({ id: b.id, x: b.x, y: b.y, state: to });
     return true;
   }
 
@@ -178,6 +198,7 @@ export class Buildings {
     b.state = LOT_VACANT;
     b.occupants = 0;
     this.free.push(id);
+    this.changes.push({ id, x, y, state: LOT_VACANT });
     return true;
   }
 
@@ -189,6 +210,57 @@ export class Buildings {
     this.records.length = 0;
     this.free.length = 0;
     this.pending = 0;
+    this.changes.length = 0;
+  }
+
+  /** Take pending lifecycle notices (drain-and-clear, same contract as Sim.drainEvents). */
+  drainChanges(): BuildingChange[] {
+    const out = this.changes;
+    this.changes = [];
+    return out;
+  }
+
+  /** Serialize the whole store, slot order preserved so stable ids survive (codec section 4). */
+  serialize(): SaveEntities {
+    return {
+      slots: this.records.map((b) => ({
+        state: b.state,
+        x: b.x,
+        y: b.y,
+        zone: b.zone,
+        level: b.level,
+        occupants: b.occupants,
+        stateSinceTick: b.stateSinceTick,
+      })),
+    };
+  }
+
+  /**
+   * Restore from a save (called after world.loadLayers). Validates every slot against the
+   * freshly loaded layers: a corrupt entity section fails loudly here rather than desyncing.
+   */
+  deserialize(data: SaveEntities): void {
+    this.reset();
+    const w = this.world;
+    assert(data.slots.length <= w.size * w.size, 'entity section: too many slots');
+    for (let id = 0; id < data.slots.length; id++) {
+      const s = data.slots[id] as Building;
+      if (s.state === LOT_VACANT) {
+        this.records.push({ id, x: 0, y: 0, zone: 0, state: LOT_VACANT, level: 0, occupants: 0, stateSinceTick: 0 });
+        this.free.push(id);
+        continue;
+      }
+      assert(s.state >= 1 && s.state <= 3, `entity ${id}: bad state ${s.state}`);
+      assert(w.inBounds(s.x, s.y), `entity ${id}: out of bounds (${s.x},${s.y})`);
+      const i = w.idx(s.x, s.y);
+      assert((w.road[i] as number) !== 1, `entity ${id}: building on road tile`);
+      assert((w.zone[i] as number) === s.zone, `entity ${id}: zone mismatch vs layers`);
+      assert((w.building[i] as number) === -1, `entity ${id}: two buildings on one tile`);
+      assert(s.zone >= 1 && s.zone <= 3 && s.level >= 1 && s.occupants >= 0, `entity ${id}: invalid fields`);
+      this.records.push({ ...s, id, zone: s.zone as ZoneId });
+      w.building[i] = id;
+      if (s.state === BUILDING_CONSTRUCTION) this.pending++;
+    }
   }
 
   /**

@@ -1,9 +1,12 @@
 // Save codec: versioned sections + per-section CRC32, gzip container.
 // Layout (inner, pre-gzip): 'CB1S' u16le version u16le section-count, then sections:
 //   u8 id u16le sver u32le len <payload> u32le crc32(payload)
-// Sections: 1 = header JSON, 2 = layers binary, 3 = meta JSON. Unknown ids are skipped.
+// Sections: 1 = header JSON, 2 = layers binary, 3 = meta JSON, 4 = entities binary (T-202).
+// Unknown ids are skipped: older decoders load newer saves minus their new sections, and
+// saves predating section 4 restore with empty buildings (repair note) — no version bump
+// needed while every section stays independently skippable.
 import { gunzipSync, gzipSync } from 'fflate';
-import type { SaveLayers, SaveMeta, SaveSource } from '../shared/types.js';
+import type { SaveEntities, SaveLayers, SaveMeta, SaveSource } from '../shared/types.js';
 import { crc32Bytes } from '../shared/crc32.js';
 
 export const SAVE_MAGIC = 'CB1S';
@@ -11,6 +14,7 @@ export const SAVE_VERSION = 1;
 export const SECTION_HEADER = 1;
 export const SECTION_LAYERS = 2;
 export const SECTION_META = 3;
+export const SECTION_ENTITIES = 4;
 
 export type SaveErrorCode = 'NOT_A_SAVE' | 'UNSUPPORTED_VERSION' | 'CORRUPT' | 'IO';
 
@@ -37,6 +41,8 @@ export interface DecodedSave {
   header: SaveHeader;
   layers: SaveLayers;
   meta: SaveMeta;
+  /** Building store; null on saves predating section 4 (restore as empty). */
+  entities: SaveEntities | null;
   repairs: string[];
 }
 
@@ -63,6 +69,65 @@ function writeSection(id: number, sver: number, payload: Uint8Array): Uint8Array
   const crc = new Uint8Array(4);
   new DataView(crc.buffer).setUint32(0, crc32Bytes(payload), true);
   return concat([head, payload, crc]);
+}
+
+/**
+ * Entity payload (section 4, sver 1): u32 slotCount; per slot u8 state, and for live slots
+ * (state!=0) additionally u16 x, u16 y, u8 zone, u8 level, u16 occupants, u32 stateSinceTick.
+ */
+function encodeEntities(entities: SaveEntities): Uint8Array {
+  const slots = entities.slots;
+  let live = 0;
+  for (const s of slots) if (s.state !== 0) live++;
+  const payload = new Uint8Array(4 + slots.length + live * 12);
+  const dv = new DataView(payload.buffer);
+  dv.setUint32(0, slots.length, true);
+  let o = 4;
+  for (const s of slots) {
+    payload[o] = s.state;
+    o += 1;
+    if (s.state === 0) continue;
+    dv.setUint16(o, s.x, true);
+    dv.setUint16(o + 2, s.y, true);
+    payload[o + 4] = s.zone;
+    payload[o + 5] = s.level;
+    dv.setUint16(o + 6, s.occupants, true);
+    dv.setUint32(o + 8, s.stateSinceTick, true);
+    o += 12;
+  }
+  return payload;
+}
+
+function parseEntities(payload: Uint8Array): SaveEntities {
+  if (payload.length < 4) throw new SaveError('CORRUPT', 'entities payload too short');
+  const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  const slotCount = dv.getUint32(0, true);
+  if (slotCount > (1 << 20)) throw new SaveError('CORRUPT', `implausible building count ${slotCount}`);
+  const slots: SaveEntities['slots'] = [];
+  let o = 4;
+  for (let id = 0; id < slotCount; id++) {
+    if (o >= payload.length) throw new SaveError('CORRUPT', 'entities payload truncated');
+    const state = payload[o] as number;
+    o += 1;
+    if (state === 0) {
+      slots.push({ state: 0, x: 0, y: 0, zone: 0, level: 0, occupants: 0, stateSinceTick: 0 });
+      continue;
+    }
+    if (state > 3) throw new SaveError('CORRUPT', `entity ${id}: bad state ${state}`);
+    if (o + 12 > payload.length) throw new SaveError('CORRUPT', 'entities payload truncated');
+    slots.push({
+      state,
+      x: dv.getUint16(o, true),
+      y: dv.getUint16(o + 2, true),
+      zone: payload[o + 4] as number,
+      level: payload[o + 5] as number,
+      occupants: dv.getUint16(o + 6, true),
+      stateSinceTick: dv.getUint32(o + 8, true),
+    });
+    o += 12;
+  }
+  if (o !== payload.length) throw new SaveError('CORRUPT', 'entities payload has trailing bytes');
+  return { slots };
 }
 
 export function encodeSave(sim: SaveSource): Uint8Array {
@@ -95,12 +160,13 @@ export function encodeSave(sim: SaveSource): Uint8Array {
       const h = new Uint8Array(4);
       const dv = new DataView(h.buffer);
       dv.setUint16(0, SAVE_VERSION, true);
-      dv.setUint16(2, 3, true);
+      dv.setUint16(2, 4, true);
       return h;
     })(),
     writeSection(SECTION_HEADER, 1, textEncoder.encode(JSON.stringify(header))),
     writeSection(SECTION_LAYERS, 1, layersPayload),
     writeSection(SECTION_META, 1, textEncoder.encode(JSON.stringify(meta))),
+    writeSection(SECTION_ENTITIES, 1, encodeEntities(sim.getSaveEntities())),
   ]);
   return gzipSync(inner, { level: 6 });
 }
@@ -128,6 +194,7 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
   let header: SaveHeader | null = null;
   let layers: SaveLayers | null = null;
   let meta: SaveMeta | null = null;
+  let entities: SaveEntities | null = null;
   let off = 8;
   for (let s = 0; s < sectionCount; s++) {
     if (off + 7 > inner.length) throw new SaveError('CORRUPT', `section ${s}: truncated header`);
@@ -146,6 +213,8 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
       layers = parseLayers(payload);
     } else if (id === SECTION_META) {
       meta = JSON.parse(textDecoder.decode(payload)) as SaveMeta;
+    } else if (id === SECTION_ENTITIES) {
+      entities = parseEntities(payload);
     } else {
       repairs.push(`skipped unknown section id ${id} (forward compatibility)`);
     }
@@ -154,7 +223,8 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
   if (!header) throw new SaveError('CORRUPT', 'missing header section');
   if (!layers) throw new SaveError('CORRUPT', 'missing layers section');
   if (!meta) throw new SaveError('CORRUPT', 'missing meta section');
-  return { header, layers, meta, repairs };
+  if (entities === null) repairs.push('no entity section (pre-T-202 save): buildings restore empty');
+  return { header, layers, meta, entities, repairs };
 }
 
 function parseLayers(payload: Uint8Array): SaveLayers {

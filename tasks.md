@@ -52,6 +52,14 @@
   Persistence entity (codec section 4) menyusul T-202 — terdokumentasi di header modul.
 - [ ] **T-202 M — Growth engine v0.** Scoring harian → spawn 1 rumah pada tile zoned+road+powered dalam ~10 game-day.
   `Deps: T-201` · `Accept: pop>0; screenshot before/after.` · `Evidence: screenshot + pop HUD.` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
+  - **Status: PARTIAL (2026-09-19).** Sim+persistence PASS: `src/sim/growth.ts` (scoring harian, eligibility
+    road-adjacency v0, pacing 1/hari, move-in capacity; powered/watered v0=serviced sampai VS-4), entity
+    section 4 di codec (round-trip hash-equal; pre-entity save → repair note + empty), event
+    `building-changed`; suite 78/78, determinisme 250/125ms hash-equal, perf dayP95 0.716ms≪50ms
+    (baseline direfresh via UPDATE_BASELINE=1). pop>0 TERBUKTI deterministic di test (occupied L1 R=4).
+  - **Remaining:** screenshot before/after + pop HUD. **Blocker: lingkungan** — sandbox tak bisa
+    mengunduh Chromium (ECONNRESET ke cdn.playwright.dev + mirror), tidak ada browser sistem.
+    Dev server 200 OK (root+modul, preview host) terverifikasi via curl. Unblock: mesin/CI ber-browser.
 - [ ] **T-203 M — Visual rumah + instancing.** Procedural house mesh + InstancedMesh swap saat spawn; 0 crash bila aset hilang.
   `Deps: T-202` · `Accept: rumah terlihat di tile tumbuh.` · `Evidence: screenshot.` · `Skills: three-best-practices, city-builder-visual-qa`
 - [ ] **T-204 M — Road-access rule.** Tanpa path → ikon "No road connection", growth berhenti.

@@ -5,9 +5,9 @@
 > Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
 > Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
-- **Updated:** 2026-09-19 #2 (Asia/Jakarta)
-- **HEAD:** T-201 commit (see `git log`)
-- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202 next).
+- **Updated:** 2026-09-19 #3 (Asia/Jakarta)
+- **HEAD:** T-202 commit (see `git log`)
+- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202 🔶 partial, T-203 next).
 
 ## Slice status
 
@@ -15,8 +15,25 @@
 |-------|-------|----------|
 | VS-0 Scaffold | ✅ DONE | `evidence/vs0-smoke.png`, CI green, `perf/baseline.json` |
 | VS-1 First tile | ✅ DONE | `evidence/vs1-{boot,built,loaded,persp,bay}.png`, 47 unit + 6 E2E green, coverage 86.6/72.5/82.5 |
-| VS-2a First House | 🔨 IN PROGRESS (1/3) | T-201 ✅: 19 unit tests, suite 66/66, coverage 87.1/77.9/85.7, perf dayP95 0.046ms |
+| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ 19 tests · T-202 🔶 78/78 suite, hash-equal round-trip, dayP95 0.716ms |
 | VS-2b..VS-7 | ⬜ QUEUED | — |
+
+## T-202 notes (2026-09-19 #3)
+
+- `src/sim/growth.ts` + `tuning/growth.ts`: scoring harian day-boundary (eligibility = zoned+vacant+
+  road-adjacency v0+demand>0; tie-break idx; pacing 1/hari), move-in capacity (R L1 = 4; C/I = 0 sampai
+  T-305). Demand R stub = 1 menanti engine T-206. Powered/watered dianggap serviced sampai VS-4 (terdokumentasi).
+- Persistence T-202: codec `SECTION_ENTITIES=4` (sver 1, per-slot biner; id stabil). Save lama tanpa
+  section → repairs note + buildings kosong; decoder lama skip section 4 (forward-compat); `SAVE_VERSION`
+  tetap 1 — strategi per-section, bukan bump, karena semua section skippable (lihat header codec).
+- `building-changed` SimEvent (0/1/2/3) mengalir sim→drainEvents untuk konsumen T-203 (instancing swap).
+- Deviasi berencana: desain §2 "road removed mid-build → refund+cancel" belum diimplementasi — dimiliki
+  T-204 (road-access rule penuh); v0 adjacency diganti path di task yang sama.
+- **Verifikasi:** 78/78 unit (growth 9, codec +2, buildings +1) · typecheck 0 · lint 0 · arch OK 50 files ·
+  build 820.19kB/224.77kB gzip · perf dayP95 0.716 ms (<50 ms; baseline.json direfresh, tick avg 7.7 µs) ·
+  determinisme chunk 250 vs 125 ms hash-equal · dev server 200 OK (root, modul, host preview e2b).
+- **BLOCKED (lingkungan):** screenshot before/after + e2e apa pun — sandbox tanpa browser; unduhan Chromium
+  gagal (ECONNRESET semua CDN/mirror). Semua bukti visual VS-2a menunggu mesin/CI ber-browser (VS-2 GATE).
 
 ## T-201 notes (2026-09-19 #2)
 
@@ -81,6 +98,9 @@ Estimates: none currently open. GPU frame-rate is NOT YET MEASURED (sandbox has 
 ## Known limitations (VS-1 exit)
 
 - No GPU in sandbox: real frame-rate, and the 10-min visual soak, are unmeasured (tracked for VS-5).
+- **(2026-09-19 #3) No browser in sandbox AND no Playwright CDN access** (ECONNRESET): E2E/visual/screenshot
+  evidence is BLOCKED for VS-2a; unit/sim/persistence evidence substitutes until a browser-capable machine
+  runs the gate. `vite.config.ts` now sets `allowedHosts: true` for proxied previews.
 - E2E is slow (~4 min, SwiftShader); consider a `?size=64` fast-boot param if VS-2 suites grow.
 - Binary save-corpus files deferred to VS-7 migration gate (codec forward-compat covered by unit test).
 - `world.ts` is 326 lines (soft-cap 300 warn); split when systems land (VS-3+).
