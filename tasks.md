@@ -98,6 +98,18 @@
     Unblock: mesin/CI ber-browser.
 - [ ] **T-206 M — RCI demand v0.** Demand −100..+100 dari unemployment/happiness/tax; RCI bar HUD merespons.
   `Deps: T-205` · `Accept: 80% branch coverage fungsi demand.` · `Evidence: vitest log.` · `Skills: city-builder-simulation-audit, tdd`
+  - **Status: PARTIAL (2026-09-19).** Acceptance branch coverage TERBUKTI TERUKUR: `src/sim/demand.ts`
+    **94.1% branch (16/17), 96.7% statement** (v8 json coverage) — di atas 80%. Formula kanonis
+    docs/03-simulation-core §2 apa adanya (bobot `tuning/demand.ts`; bobot terkunci balancing suite T-306);
+    komputasi tangan bootstrap: **R +7, C +2, I +16.5 @ pajak 9%** (membolehkan VS-2a tetap tumbuh).
+    Ledger stub v0 (header modul): unemp/jobs/workforce=0 (T-305), happy=0.5 (VS-3/T-305), tax 9% (T-301),
+    `?` terms di-drop, **smoothing 0.2/day DICUT** (momentum=persisted state → save-format change → §9 ask-first;
+    recompute di **akhir** growth stage dgn lag 1 hari = pengganti) dan **vacancy diinterpretasi dwelling-R**
+    (rumah occupied-occupants-0 ÷ occupied-R; semantik kanonis "emptyZoned/totalZoned" mustahil bootstrap).
+    Integrasi: growth eligibility supersede stub T-202; C/I bootstrap kini spawn; snapshot.demand int →
+    RCI bars TopBar (pos/neg tint). 10 test hijau.
+  - **Remaining:** screenshot RCI bar + lag visual respons di HUD live; balancing S-green calibration (VS-3).
+    **Blocker: lingkungan** (tanpa browser; identik T-202..T-205). Unblock: mesin/CI ber-browser.
 - [ ] **T-207 M — Land value v0 + desirability.** Base − pollution + halo park/air; difusi 3×3; overlay.
   `Deps: T-202` · `Accept: park menaikkan value sekitar; overlay gradien.` · `Evidence: overlay screenshot.` · `Skills: city-builder-simulation-audit`
 - [ ] **T-208 S — HUD pop/RCI(p4).** Populasi + RCI bar + jobs + unemployment selalu terlihat; update 4Hz.

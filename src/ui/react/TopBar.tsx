@@ -33,6 +33,14 @@ export function TopBar({
       <span className="stat dim" title="Population">
         Pop {snapshot.population.toLocaleString('en-US')}
       </span>
+      {/* T-206 FR-S02: the canonical RCI bars mirror sim.demand (sim truth, no UI kernel). */}
+      <span className="rci" role="group" aria-label="RCI demand">
+        {(['r', 'c', 'i'] as const).map((k) => (
+          <span key={k} className={`rci-${k} ${snapshot.demand[k] >= 0 ? 'pos' : 'neg'}`} title={`${k.toUpperCase()} demand`}>
+            {k.toUpperCase()} {snapshot.demand[k] > 0 ? `+${snapshot.demand[k]}` : snapshot.demand[k]}
+          </span>
+        ))}
+      </span>
       <span className="stat dim" title={`Tick ${snapshot.tick}`}>
         Y{d.year} M{d.month} D{d.day}
       </span>

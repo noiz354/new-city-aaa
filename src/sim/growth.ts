@@ -12,6 +12,7 @@
 // Powered/watered are not modelled until VS-4 (T-405/T-406): v0 treats every lot as serviced.
 // Deterministic: tile-index scan order, no RNG, no wall clock.
 import { BUILDING_OCCUPIED, BUILDING_CONSTRUCTION, type Buildings } from './buildings.js';
+import type { Demand } from './demand.js';
 import type { RoadAccess } from './road-access.js';
 import { BUILDING_CAPACITY, GROWTH_TUNING } from './tuning/growth.js';
 import type { World } from './world.js';
@@ -21,22 +22,17 @@ export interface GrowthResult {
   movedIn: number;
 }
 
-function demandFor(zone: number): number {
-  if (zone === 1) return GROWTH_TUNING.demandR;
-  if (zone === 2) return GROWTH_TUNING.demandC;
-  if (zone === 3) return GROWTH_TUNING.demandI;
-  return 0;
-}
-
 export class Growth {
   private readonly world: World;
   private readonly buildings: Buildings;
   private readonly roadAccess: RoadAccess;
+  private readonly demand: Demand;
 
-  constructor(world: World, buildings: Buildings, roadAccess: RoadAccess) {
+  constructor(world: World, buildings: Buildings, roadAccess: RoadAccess, demand: Demand) {
     this.world = world;
     this.buildings = buildings;
     this.roadAccess = roadAccess;
+    this.demand = demand;
   }
 
   /** Daily pass. Called by Sim when the tick crosses a day boundary. */
@@ -68,7 +64,7 @@ export class Growth {
         const i = w.idx(x, y);
         const z = w.zone[i] as number;
         if (z === 0 || (w.building[i] as number) !== -1) continue;
-        const demand = demandFor(z);
+        const demand = this.demand.forZone(z);
         if (demand <= 0 || !this.roadAccess.isConnected(x, y)) continue;
         candidates.push({ idx: i, score: demand * 100 + GROWTH_TUNING.roadAdjacencyBonus });
       }
@@ -89,7 +85,7 @@ export class Growth {
     const z = w.zone[i] as number;
     if (z === 0) return 'unzoned';
     if ((w.building[i] as number) !== -1) return 'occupied';
-    if (demandFor(z) <= 0) return 'no-demand';
+    if (this.demand.forZone(z) <= 0) return 'no-demand';
     if (!this.roadAccess.isConnected(x, y)) return 'no-road-access';
     return null;
   }

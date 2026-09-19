@@ -53,13 +53,16 @@ describe('Growth v0: daily scoring → spawn (UJ-01 sim path)', () => {
     expect(sim.buildings.stateAt(20, 20)).toBe(LOT_VACANT);
   });
 
-  it('does not grow C/I while their demand stub is zero (demand-driven, T-206 will feed it)', () => {
+  it('C/I lots spawn once the T-206 engine opens their demand (bootstrap vector is positive)', () => {
+    // T-206: the zero-stub era is over — at default 9% tax, neutral happy, no workforce the
+    // canonical formula yields C +2 and I +16.5 (see demand.test.ts "bootstrap city").
     const sim = new Sim({ seed: 7, size: 64, preset: 'plains' });
     sim.execute({ kind: 'place-road', path: [10, 11].map((x) => ({ x, y: 10 })) });
     sim.execute({ kind: 'paint-zone', rect: { x0: 10, y0: 9, x1: 11, y1: 9 }, zone: 2 });
     sim.execute({ kind: 'paint-zone', rect: { x0: 10, y0: 11, x1: 11, y1: 11 }, zone: 3 });
     runDays(sim, 10);
-    expect(sim.buildings.count).toBe(0);
+    expect(sim.buildings.count).toBeGreaterThanOrEqual(2); // C and I both founded (1/day pacing)
+    expect(sim.snapshot().population).toBe(0); // C/I capacity is jobs, not residents (T-305)
   });
 
   it('growth starts only after the road exists (zone first, road later)', () => {

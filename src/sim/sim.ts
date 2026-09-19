@@ -12,6 +12,7 @@ import type {
 import { fnv1aBytes } from '../shared/crc32.js';
 import { Buildings } from './buildings.js';
 import { Clock, TICKS_PER_DAY, TICKS_PER_MONTH } from './clock.js';
+import { Demand } from './demand.js';
 import { normalizeRect } from '../shared/grid.js';
 import { applyBulldoze, applyRoad, applyZone, validateBulldoze, validateRoad, validateZone } from './commands.js';
 import { Economy } from './economy.js';
@@ -38,6 +39,7 @@ export class Sim {
   readonly growth: Growth; // T-202: daily scoring → spawn + move-in
   readonly roadAccess: RoadAccess; // T-204: canonical attachment flags (derived truth)
   readonly upkeep: Upkeep; // T-205: monthly per-building/road upkeep (economy stage)
+  readonly demand: Demand; // T-206: FR-S02 RCI demand, recomputed daily (derived)
   private events: SimEvent[] = [];
 
   constructor(opts: SimOptions = {}) {
@@ -47,7 +49,8 @@ export class Sim {
     this.rng = new Rng(this.world.seed ^ 0x51ed2709);
     this.buildings = new Buildings(this.world);
     this.roadAccess = new RoadAccess(this.world);
-    this.growth = new Growth(this.world, this.buildings, this.roadAccess);
+    this.demand = new Demand(this.world, this.buildings);
+    this.growth = new Growth(this.world, this.buildings, this.roadAccess, this.demand);
     this.upkeep = new Upkeep(this.world, this.buildings, this.economy);
   }
 
@@ -59,7 +62,15 @@ export class Sim {
     // Frozen tick order (simulation-architecture §2): growth stage. Lifecycle timers first,
     // then the daily growth pass at the day boundary (heavy systems on day boundaries only).
     this.buildings.onTick(tick);
-    if (tick % TICKS_PER_DAY === 0) this.growth.onDay(tick);
+    if (tick % TICKS_PER_DAY === 0) {
+      this.growth.onDay(tick);
+      // Demand recomputes AT THE END of the growth stage (post completion + move-in):
+      // a freshly completed house's move-in lands within the same boundary pass, so
+      // pre-pass recompute would count it as a spurious one-day vacancy dip. The doc's
+      // smoothing (0.2/day) is cut in v0 (momentum = persisted state, §9 ask-first);
+      // end-of-stage recompute with one-day gate lag is the canonical lag's v0 stand-in.
+      this.demand.recompute();
+    }
     // Economy stage AFTER growth (frozen order: … → growth → fields-commit → economy(monthly)).
     if (tick % TICKS_PER_MONTH === 0 && tick > 0) {
       const bill = this.upkeep.onMonth();
@@ -162,6 +173,11 @@ export class Sim {
       date: this.clock.date(),
       balance: this.economy.balance,
       population: this.buildings.population(),
+      demand: {
+        r: Math.round(this.demand.target().r),
+        c: Math.round(this.demand.target().c),
+        i: Math.round(this.demand.target().i),
+      },
       size: this.world.size,
       seed: this.world.seed,
       paused: this.clock.paused,

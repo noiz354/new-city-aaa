@@ -5,9 +5,9 @@
 > Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
 > Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
-- **Updated:** 2026-09-19 #6 (Asia/Jakarta)
-- **HEAD:** T-205 upkeep commit (see `git log`)
-- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202..T-205 🔶 partial — visual evidence blocked).
+- **Updated:** 2026-09-19 #7 (Asia/Jakarta)
+- **HEAD:** T-206 demand commit (see `git log`)
+- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202..T-206 🔶 partial — visual evidence blocked).
 
 ## Slice status
 
@@ -15,8 +15,32 @@
 |-------|-------|----------|
 | VS-0 Scaffold | ✅ DONE | `evidence/vs0-smoke.png`, CI green, `perf/baseline.json` |
 | VS-1 First tile | ✅ DONE | `evidence/vs1-{boot,built,loaded,persp,bay}.png`, 47 unit + 6 E2E green, coverage 86.6/72.5/82.5 |
-| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ · T-202 🔶 (78 suite) · T-203 🔶 (85/85) · T-204 🔶 (101/101) · T-205 🔶 (111/111, 10 upkeep tests) |
+| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ · T-202 🔶 · T-203 🔶 · T-204 🔶 · T-205 🔶 · T-206 🔶 (121/121 suite; branch cov demand 94.1%) |
 | VS-2b..VS-7 | ⬜ QUEUED | — |
+
+## T-206 notes (2026-09-19 #7)
+
+- `src/sim/demand.ts` + `tuning/demand.ts`: formula kanonis docs/03-simulation-core §2 apa adanya
+  (R = 60(1−unemp)+30h−40tax−25vacR+20jobs−50; C = 50popF+20h−40tax−25vacC+10;
+  I = 55workforce+25(1−taxI×1.2)−25vacI+5; clamp ±100). Bootstrap @9%: **R +7, C +2, I +16.5** (hitung-tangan
+  terverifikasi test) — VS-2a tetap tumbuh; I kini spawn dari zone pertama (stub-zero T-202 dihapus).
+- **Keputusan interpretasi v0 (ledger di header modul, tercatat tasks.md T-206):**
+  (1) `smoothing 0.2/day` DICUT — momentum = persisted state baru = perubahan format save = spec §9
+  ask-first; pengganti: **recompute di akhir growth stage** (post move-in) dengan lag gate 1 hari —
+  awalnya recompute pra-growth menyebabkan "flicker satu hari" (rumah fresh-complete terlihat vacant 1 hari,
+  pacing test + vacancy test menangkap perilaku ini); (2) `vacancy` "emptyZoned/totalZoned" mustahil
+  bootstrap (kota baru = 1 → semua demand negatif → VS-2a tak terpenuhi) → v0: **R dwelling vacancy**
+  = occupied-dgn-occupants-0 ÷ occupied-R; C/I = 0 (T-305 owns); (3) stubs: unemp/jobs/workforce = 0 (T-305),
+  happy = 0.5 (VS-3), tax 9% (T-301), `?` terms dropped.
+- Integrasi: `Demand` di Sim (ctor compute, recompute harian end-of-stage), growth diberi demand ref;
+  `snapshot.demand` int-rounded → RCI bars TopBar (`rci-r/c/i` tint pos/neg). Determinisme & load parity
+  hijau (demand derived → nol perubahan codec).
+- **Verifikasi:** suite **121/121** (demand 10, growth +1 pengganti stub) · **branch coverage demand.ts
+  94.1% (16/17)**, statements 96.7% (acceptance: ≥80% — TERUKUR v8 json, bukan dugaan) · lint/typecheck/
+  arch(62)/build/perf hijau. Catatan: perf gagal **hanya** di mode coverage (instrumentasi) — standalone PASS
+  (diverifikasi langsung).
+- Skills dipakai: `city-builder-simulation-audit` (tick-order & determinisme), `tdd` (formula authoritative,
+  RED→GREEN, fail→temuan desain→fix ordering).
 
 ## T-205 notes (2026-09-19 #6)
 

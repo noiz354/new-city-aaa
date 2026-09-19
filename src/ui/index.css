@@ -136,3 +136,18 @@
   padding: 8px 16px;
   font-weight: 600;
 }
+
+/* T-206: RCI demand bars (TopBar) — sim demand truth, positive/negative tint */
+.rci {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.rci span {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.rci-r.pos { color: #43a047; }
+.rci-c.pos { color: #1e88e5; }
+.rci-i.pos { color: #fbc02d; }
+.rci .neg { opacity: 0.55; }

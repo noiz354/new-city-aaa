@@ -98,6 +98,8 @@ export interface SimSnapshot {
   date: SimDate;
   balance: number;
   population: number;
+  /** T-206 FR-S02: RCI demand ∈ [−100,100], integer-rounded for the HUD bars. */
+  demand: { r: number; c: number; i: number };
   size: number;
   seed: number;
   paused: boolean;
