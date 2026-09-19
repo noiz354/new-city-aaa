@@ -11,7 +11,8 @@
 >
 > **Status reconcile (2026-09-19):** VS-0 dan VS-1 `[x]` terverifikasi (bukti: typecheck/build/test hijau,
 > dev 200 OK port 5180, save hash-equal, F3 overlay — lih. `docs/05-execution/current-development-state.md`).
-> Semua tahap lain `[ ]` — termasuk yang disebut di dokumen lama seolah selesai.
+> Update 2026-09-19 #2: **T-201 `[x]`** (19 test baru hijau; VS-2a dimulai). Selain itu semua tahap lain `[ ]` —
+> termasuk yang disebut di dokumen lama seolah selesai.
 
 ## VS-0 — Foundation (T-1xx)
 
@@ -44,12 +45,30 @@
 
 > Slice pertama: **VS-2a First House** = T-201..T-203 (satu rumah tulus tumbuh, bukan hardcode).
 
-- [ ] **T-201 M — Building lifecycle state.** State machine vacant→construction→occupied→abandoned + entity `buildings[]` terisi.
-  `Deps: VS-1 GATE` · `Accept: transisi terdokumen + unit test tiap transisi.` · `Evidence: vitest log.` · `Skills: city-builder-simulation-audit, tdd`
+- [x] **T-201 M — Building lifecycle state.** State machine vacant→construction→occupied→abandoned + entity `buildings[]` terisi.
+  `Deps: VS-1 GATE` · `Accept: transisi terdokumen + unit test tiap transisi.` · `Evidence: vitest log (buildings.test.ts 19/19, suite 66/66, 2026-09-19).` · `Skills: city-builder-simulation-audit, tdd`
+  Selesai: `src/sim/buildings.ts` (transisi kanonis design-doc §2, scope VS-2a; timer 3 hari via tuning), wiring `sim.ts`
+  (onTick, sweep bulldoze/road, snapshot.population, hash, loadState reset), rule "not occupied" di `validateZone`.
+  Persistence entity (codec section 4) menyusul T-202 — terdokumentasi di header modul.
 - [ ] **T-202 M — Growth engine v0.** Scoring harian → spawn 1 rumah pada tile zoned+road+powered dalam ~10 game-day.
   `Deps: T-201` · `Accept: pop>0; screenshot before/after.` · `Evidence: screenshot + pop HUD.` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
+  - **Status: PARTIAL (2026-09-19).** Sim+persistence PASS: `src/sim/growth.ts` (scoring harian, eligibility
+    road-adjacency v0, pacing 1/hari, move-in capacity; powered/watered v0=serviced sampai VS-4), entity
+    section 4 di codec (round-trip hash-equal; pre-entity save → repair note + empty), event
+    `building-changed`; suite 78/78, determinisme 250/125ms hash-equal, perf dayP95 0.716ms≪50ms
+    (baseline direfresh via UPDATE_BASELINE=1). pop>0 TERBUKTI deterministic di test (occupied L1 R=4).
+  - **Remaining:** screenshot before/after + pop HUD. **Blocker: lingkungan** — sandbox tak bisa
+    mengunduh Chromium (ECONNRESET ke cdn.playwright.dev + mirror), tidak ada browser sistem.
+    Dev server 200 OK (root+modul, preview host) terverifikasi via curl. Unblock: mesin/CI ber-browser.
 - [ ] **T-203 M — Visual rumah + instancing.** Procedural house mesh + InstancedMesh swap saat spawn; 0 crash bila aset hilang.
   `Deps: T-202` · `Accept: rumah terlihat di tile tumbuh.` · `Evidence: screenshot.` · `Skills: three-best-practices, city-builder-visual-qa`
+  - **Status: PARTIAL (2026-09-19).** `src/view/buildings.ts`: 2 InstancedMesh (scaffold/house procedural,
+    tint abandoned, swap-remove dense, capacity grow ×2, rotasi fasad deterministik) — murni proyeksi state sim
+    (deltas via `building-changed`, rebuild via `sync`), nol aset eksternal (crash-by-missing-asset mustahil by
+    construction). Wiring `view.ts` + `main.ts`; 7 unit test headless (positions/denseness/grow/sync idempoten/2 draws);
+    suite 85/85; build 828KB/226.6KB gzip; dev 200 OK.
+  - **Remaining:** screenshot "rumah terlihat di tile tumbuh". **Blocker: lingkungan** (sama dgn T-202:
+    tanpa browser + CDN Playwright ECONNRESET). Unblock: mesin/CI ber-browser.
 - [ ] **T-204 M — Road-access rule.** Tanpa path → ikon "No road connection", growth berhenti.
   `Deps: T-202` · `Accept: zona terisolasi tidak tumbuh + ikon tampil.` · `Evidence: screenshot.` · `Skills: city-builder-simulation-audit`
 - [ ] **T-205 M — Upkeep tick.** Upkeep bulanan per bangunan; treasury berkurang terukur + unit test.

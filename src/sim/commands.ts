@@ -58,7 +58,12 @@ export function validateZone(
         continue;
       }
       const i = world.idx(x, y);
-      if ((world.road[i] as number) === 1 || world.buildBlockReason(x, y) !== null) {
+      // Zone validity (building-and-zoning §1): not water/blocked, not road, not occupied by a building.
+      if (
+        (world.road[i] as number) === 1 ||
+        (world.building[i] as number) !== -1 ||
+        world.buildBlockReason(x, y) !== null
+      ) {
         skipped++;
         continue;
       }

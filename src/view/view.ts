@@ -1,7 +1,8 @@
 // View: owns SceneManager + rig + layers; polls chunk-dirty flags each frame.
 import * as THREE from 'three';
-import type { TilePos } from '../shared/types.js';
+import type { BuildingSlotData, SimEvent, TilePos } from '../shared/types.js';
 import { DIRTY_NONE, DIRTY_ROADS, DIRTY_ZONES, type WorldView } from '../shared/types.js';
+import { BuildingLayer } from './buildings.js';
 import { CameraRig } from './cameras.js';
 import { FpsOverlay } from './f3.js';
 import { GhostLayer, HoverMarker } from './highlight.js';
@@ -22,6 +23,7 @@ export class View {
   private roads: RoadLayer;
   private zones: ZoneOverlay;
   private terrain: THREE.Mesh;
+  private buildings: BuildingLayer;
   private readonly f3: FpsOverlay;
 
   constructor(
@@ -39,6 +41,8 @@ export class View {
     this.sceneMgr.scene.add(this.roads.group);
     this.zones = new ZoneOverlay(world);
     this.sceneMgr.scene.add(this.zones.mesh);
+    this.buildings = new BuildingLayer(world);
+    this.sceneMgr.scene.add(this.buildings.group);
     this.sceneMgr.scene.add(this.hover.group);
     world.chunkDirty.fill(DIRTY_NONE);
     this.ghost = new GhostLayer(this.sceneMgr.scene);
@@ -67,7 +71,22 @@ export class View {
     this.sceneMgr.scene.add(this.terrain);
     this.roads.rebuildAll(world);
     this.zones.update(world);
+    this.buildings.dispose();
+    this.buildings = new BuildingLayer(world);
+    this.sceneMgr.scene.add(this.buildings.group);
     world.chunkDirty.fill(DIRTY_NONE);
+  }
+
+  /** Consume the sim event stream (drained once per frame by main). */
+  applyEvents(events: SimEvent[]): void {
+    for (const e of events) {
+      if (e.type === 'building-changed') this.buildings.apply(e);
+    }
+  }
+
+  /** Rebuild the building projection wholesale (boot + post-load full sync). */
+  syncBuildings(slots: BuildingSlotData[]): void {
+    this.buildings.sync(slots);
   }
 
   screenToTile(clientX: number, clientY: number): PickResult | null {
@@ -117,6 +136,7 @@ export class View {
     this.rig.dispose();
     this.roads.dispose();
     this.zones.dispose();
+    this.buildings.dispose();
     this.sceneMgr.dispose();
   }
 }

@@ -44,7 +44,11 @@ export type SimEvent =
   | { type: 'chunk-dirty'; cx: number; cy: number }
   | { type: 'treasury-changed'; balance: number }
   | { type: 'command-applied'; kind: Command['kind']; cost: number; tiles: number }
-  | { type: 'command-rejected'; kind: Command['kind']; reason: string };
+  | { type: 'command-rejected'; kind: Command['kind']; reason: string }
+  /** Building lifecycle change (T-201/T-202). state: 0=vacant(demolished) 1=construction 2=occupied 3=abandoned. */
+  | { type: 'building-changed'; id: number; x: number; y: number; state: number }
+  /** Road attachment flip on a zoned/building tile (T-204, FR-C06). blocked=true → show "No road connection". */
+  | { type: 'road-access-changed'; x: number; y: number; blocked: boolean };
 
 export interface SimDate {
   year: number;
@@ -71,6 +75,22 @@ export interface SaveLayers {
   height: Uint8Array;
   zone: Uint8Array;
   road: Uint8Array;
+}
+
+/** One building-store slot in a save (T-202). state 0 = free slot; slot order = stable building ids. */
+export interface BuildingSlotData {
+  state: number; // 0=vacant(free) 1=construction 2=occupied 3=abandoned
+  x: number;
+  y: number;
+  zone: number;
+  level: number;
+  occupants: number;
+  stateSinceTick: number;
+}
+
+/** Entity section payload (codec section 4, sver 1). */
+export interface SaveEntities {
+  slots: BuildingSlotData[];
 }
 
 export interface SimSnapshot {
@@ -147,4 +167,5 @@ export interface SaveSource {
   snapshot(): SimSnapshot;
   getSaveMeta(): SaveMeta;
   getSaveLayers(): SaveLayers;
+  getSaveEntities(): SaveEntities;
 }

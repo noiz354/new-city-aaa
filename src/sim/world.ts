@@ -75,7 +75,7 @@ export class World {
   zone: Uint8Array;
   road: Uint8Array;
   roadMask: Uint8Array;
-  building: Int32Array;
+  building: Int32Array; // tile → buildingId (-1=none); written EXCLUSIVELY by sim/buildings.ts (T-201)
   chunkDirty: Uint8Array;
   counts: WorldCounts = { roads: 0, zonesR: 0, zonesC: 0, zonesI: 0 };
 
