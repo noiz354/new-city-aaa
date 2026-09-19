@@ -11,7 +11,8 @@
 >
 > **Status reconcile (2026-09-19):** VS-0 dan VS-1 `[x]` terverifikasi (bukti: typecheck/build/test hijau,
 > dev 200 OK port 5180, save hash-equal, F3 overlay — lih. `docs/05-execution/current-development-state.md`).
-> Semua tahap lain `[ ]` — termasuk yang disebut di dokumen lama seolah selesai.
+> Update 2026-09-19 #2: **T-201 `[x]`** (19 test baru hijau; VS-2a dimulai). Selain itu semua tahap lain `[ ]` —
+> termasuk yang disebut di dokumen lama seolah selesai.
 
 ## VS-0 — Foundation (T-1xx)
 
@@ -44,8 +45,11 @@
 
 > Slice pertama: **VS-2a First House** = T-201..T-203 (satu rumah tulus tumbuh, bukan hardcode).
 
-- [ ] **T-201 M — Building lifecycle state.** State machine vacant→construction→occupied→abandoned + entity `buildings[]` terisi.
-  `Deps: VS-1 GATE` · `Accept: transisi terdokumen + unit test tiap transisi.` · `Evidence: vitest log.` · `Skills: city-builder-simulation-audit, tdd`
+- [x] **T-201 M — Building lifecycle state.** State machine vacant→construction→occupied→abandoned + entity `buildings[]` terisi.
+  `Deps: VS-1 GATE` · `Accept: transisi terdokumen + unit test tiap transisi.` · `Evidence: vitest log (buildings.test.ts 19/19, suite 66/66, 2026-09-19).` · `Skills: city-builder-simulation-audit, tdd`
+  Selesai: `src/sim/buildings.ts` (transisi kanonis design-doc §2, scope VS-2a; timer 3 hari via tuning), wiring `sim.ts`
+  (onTick, sweep bulldoze/road, snapshot.population, hash, loadState reset), rule "not occupied" di `validateZone`.
+  Persistence entity (codec section 4) menyusul T-202 — terdokumentasi di header modul.
 - [ ] **T-202 M — Growth engine v0.** Scoring harian → spawn 1 rumah pada tile zoned+road+powered dalam ~10 game-day.
   `Deps: T-201` · `Accept: pop>0; screenshot before/after.` · `Evidence: screenshot + pop HUD.` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
 - [ ] **T-203 M — Visual rumah + instancing.** Procedural house mesh + InstancedMesh swap saat spawn; 0 crash bila aset hilang.

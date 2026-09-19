@@ -9,6 +9,7 @@ import type {
   SimSnapshot,
 } from '../shared/types.js';
 import { fnv1aBytes } from '../shared/crc32.js';
+import { Buildings } from './buildings.js';
 import { Clock } from './clock.js';
 import { normalizeRect } from '../shared/grid.js';
 import { applyBulldoze, applyRoad, applyZone, validateBulldoze, validateRoad, validateZone } from './commands.js';
@@ -29,6 +30,7 @@ export class Sim {
   readonly clock: Clock;
   readonly economy: Economy;
   readonly rng: Rng;
+  readonly buildings: Buildings; // T-201: authoritative building lifecycle store
   private events: SimEvent[] = [];
 
   constructor(opts: SimOptions = {}) {
@@ -36,6 +38,7 @@ export class Sim {
     this.clock = new Clock(opts.now ?? (() => 0));
     this.economy = new Economy();
     this.rng = new Rng(this.world.seed ^ 0x51ed2709);
+    this.buildings = new Buildings(this.world);
   }
 
   update(realDtMs: number): void {
@@ -43,8 +46,8 @@ export class Sim {
   }
 
   protected onTick(tick: number): void {
-    void tick;
-    // VS-1: time flows; no systems yet. VS-2+ hooks: growth, traffic, economy.
+    // Frozen tick order (simulation-architecture §2): growth stage drives lifecycle timers.
+    this.buildings.onTick(tick);
   }
 
   execute(cmd: Command): CommandResult {
@@ -53,6 +56,7 @@ export class Sim {
       const v = validateRoad(this.world, this.economy, cmd.path);
       if (!v.ok || !v.plan) res = v;
       else {
+        for (const t of v.plan.newTiles) this.buildings.demolishAt(t.x, t.y); // road clears buildings
         const applied = applyRoad(this.world, v.plan);
         this.economy.spend(v.cost);
         res = { ok: true, cost: v.cost, tiles: applied };
@@ -71,6 +75,7 @@ export class Sim {
       const v = validateBulldoze(this.world, this.economy, cmd.rect);
       if (!v.ok || !v.plan) res = v;
       else {
+        for (const t of v.plan.tiles) this.buildings.demolishAt(t.x, t.y); // bulldoze demolishes first
         const applied = applyBulldoze(this.world, v.plan);
         this.economy.spend(v.cost);
         res = { ok: true, cost: v.cost, tiles: applied };
@@ -125,7 +130,7 @@ export class Sim {
       tick: this.clock.tick,
       date: this.clock.date(),
       balance: this.economy.balance,
-      population: 0,
+      population: this.buildings.population(),
       size: this.world.size,
       seed: this.world.seed,
       paused: this.clock.paused,
@@ -158,6 +163,7 @@ export class Sim {
       throw new Error(`save size ${meta.worldSize} != world size ${this.world.size} (resize unsupported)`);
     }
     this.world.loadLayers(layers, meta.worldSeed);
+    this.buildings.reset(); // entity persistence lands in T-202 (codec section 4); never keep stale records
     const speed = meta.speed === 0 || meta.speed === 1 || meta.speed === 2 || meta.speed === 3 ? meta.speed : 1;
     this.clock.setState({ tick: meta.tick, accumulator: meta.accumulator, speed });
     this.economy.balance = meta.balance;
@@ -178,6 +184,7 @@ export class Sim {
     dv.setUint32(20, meta.worldSeed, true);
     let h = fnv1aBytes(head);
     for (const part of this.world.hashParts()) h = fnv1aBytes(part, h);
+    h = this.buildings.hashInto(h);
     return h >>> 0;
   }
 }

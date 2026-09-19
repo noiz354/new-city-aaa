@@ -5,9 +5,9 @@
 > Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
 > Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
-- **Updated:** 2026-09-19 (Asia/Jakarta)
-- **HEAD:** VS-1 commit (see `git log`)
-- **Slices complete:** VS-0, VS-1. **Next:** VS-2 (City skeleton).
+- **Updated:** 2026-09-19 #2 (Asia/Jakarta)
+- **HEAD:** T-201 commit (see `git log`)
+- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202 next).
 
 ## Slice status
 
@@ -15,8 +15,25 @@
 |-------|-------|----------|
 | VS-0 Scaffold | ✅ DONE | `evidence/vs0-smoke.png`, CI green, `perf/baseline.json` |
 | VS-1 First tile | ✅ DONE | `evidence/vs1-{boot,built,loaded,persp,bay}.png`, 47 unit + 6 E2E green, coverage 86.6/72.5/82.5 |
-| VS-2 City skeleton | ⏳ NEXT | — |
-| VS-3..VS-7 | ⬜ QUEUED | — |
+| VS-2a First House | 🔨 IN PROGRESS (1/3) | T-201 ✅: 19 unit tests, suite 66/66, coverage 87.1/77.9/85.7, perf dayP95 0.046ms |
+| VS-2b..VS-7 | ⬜ QUEUED | — |
+
+## T-201 notes (2026-09-19 #2)
+
+- `src/sim/buildings.ts`: lifecycle store (vacant=absence / construction / occupied / abandoned),
+  transisi sesuai `03-game-design/building-and-zoning-systems.md` §2 dalam scope VS-2a: spawn via
+  `startConstruction`, completion 3-game-day timer di tick path (`CONSTRUCTION_TICKS=72`, `tuning/buildings.ts`),
+  ⇄ occupied↔abandoned via satu pintu `transition()`, `demolishAt` untuk bulldoze/road. Rubble/burning/
+  damaged didefer ke T-603. Invariant: occupants>0 hanya occupied; id stabil via free-list.
+- Wiring `sim.ts`: onTick growth stage, sweep demolish sebelum bulldoze/road, `snapshot().population`
+  kini derived, `hash()` mencakup buildings, `loadState` me-reset store.
+- `commands.ts validateZone`: lot ber-bangunan di-skip (design §1 "not occupied") — fix rule.
+- **Persistence:** entity section (codec id 4) belum ada → buildings tidak ikut save; by design ditunda
+  ke T-202 (belum ada path gameplay yang membuat building). Decoder lama skip section tak dikenal
+  (forward-compat); hash sudah mencakup store sehingga round-trip test T-202 akan memaksa kebenaran.
+- **Verification:** unit 66/66 (19 baru) · typecheck 0 · lint 0 error · arch OK 47 files · build 815.85kB/
+  223.42kB gzip (`<5MB` NFR-02) · coverage 87.08/77.91/85.71 lines-90.97 · perf dayP95 0.046ms (<50ms).
+  E2E NOT RUN (belum ada surface UI/player ke buildings; dijalankan di T-203 saat view tersambung).
 
 ## VS-1 acceptance (from `vertical-slice-milestones.md`)
 
