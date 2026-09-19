@@ -165,6 +165,12 @@ export class View {
     return this.world.tileCenterWorld(tile.x, tile.y);
   }
 
+  /** Camera "go to tile" (evidence captures now; alert click-to-locate in T-605). */
+  focusTile(tile: TilePos, zoom?: number, instant = false): void {
+    const c = this.world.tileCenterWorld(tile.x, tile.y);
+    this.rig.focus(c.x, c.z, zoom, instant);
+  }
+
   groundY(wx: number, wz: number): number {
     return this.world.groundHeightAt(wx, wz);
   }

@@ -194,11 +194,8 @@ export class Sim {
       jobs: 0,
       unemployment: 0,
       bankrupt: this.economy.isBankrupt(),
-      lastMonth: (() => {
-        const m = this.economy.lastMonth();
-        return { income: m.income, expense: m.expense };
-      })(),
-      history: this.economy.history().map((m) => ({ income: m.income, expense: m.expense })),
+      lastMonth: this.economy.lastMonth(),
+      history: this.economy.history(),
       size: this.world.size,
       seed: this.world.seed,
       paused: this.clock.paused,
@@ -240,6 +237,10 @@ export class Sim {
     this.roadAccess.recomputeForLoad(this.buildings); // derived flags follow the restored layers silently
     this.fields.invalidateStatic(); // restored terrain bytes → rebuild static base
     this.fields.recompute(); // land value is derived; rebuilt from restored world+buildings
+    // Demand is derived too, but growth reads it BEFORE the daily recompute (frozen order), so a
+    // stale bootstrap vector here would make the first post-load day diverge from an uninterrupted
+    // run (and show wrong RCI bars until then). Rebuild it from the restored city now.
+    this.demand.recompute();
     const speed = meta.speed === 0 || meta.speed === 1 || meta.speed === 2 || meta.speed === 3 ? meta.speed : 1;
     this.clock.setState({ tick: meta.tick, accumulator: meta.accumulator, speed });
     this.economy.balance = meta.balance;

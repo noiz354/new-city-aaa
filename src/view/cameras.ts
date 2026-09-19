@@ -56,6 +56,21 @@ export class CameraRig {
     return this.projection === 'ortho' ? [40, 1400] : [60, 2600];
   }
 
+  /**
+   * Jump the rig goal to a world point (camera "go to": evidence captures, click-to-locate in
+   * T-605). `zoom` = ortho frustum height / persp distance, clamped to the projection's range;
+   * `instant` skips the damped approach so the next frame already looks there.
+   */
+  focus(worldX: number, worldZ: number, zoom?: number, instant = false): void {
+    this.goalTarget.set(worldX, 0, worldZ);
+    this.clampTarget(this.goalTarget);
+    if (zoom !== undefined) {
+      const [lo, hi] = this.zoomRange();
+      this.goalZoom = THREE.MathUtils.clamp(zoom, lo, hi);
+    }
+    if (instant) this.snap();
+  }
+
   private aspect(): number {
     const r = this.canvas.getBoundingClientRect();
     return r.height > 0 ? r.width / r.height : 16 / 9;

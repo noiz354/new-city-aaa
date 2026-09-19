@@ -5,9 +5,10 @@
 > Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
 > Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
-- **Updated:** 2026-09-19 #11 (Asia/Jakarta)
-- **HEAD:** T-303 budget panel commit (see `git log`)
-- **Slices complete:** VS-0, VS-1. **VS-2a: subtask-semua ✅ (engine-level);** evidence visual (screenshot/icon) BLOCKED lingkungan — milestone masih ⚠️ CONDITIONAL sampai screenshot retro-capture.
+- **Updated:** 2026-09-19 #12 (Asia/Jakarta)
+- **HEAD:** VS-2a visual evidence + 3 capture-found fixes (see `git log`)
+- **Slices complete:** VS-0, VS-1, **VS-2a ✅ (engine + visual — `npm run e2e` 8/8 hijau di sandbox).**
+  VS-3: T-301/T-303 ✅; T-302 🔒 keputusan format save (§9).
 
 ## Slice status
 
@@ -15,9 +16,44 @@
 |-------|-------|----------|
 | VS-0 Scaffold | ✅ DONE | `evidence/vs0-smoke.png`, CI green, `perf/baseline.json` |
 | VS-1 First tile | ✅ DONE | `evidence/vs1-{boot,built,loaded,persp,bay}.png`, 47 unit + 6 E2E green, coverage 86.6/72.5/82.5 |
-| VS-3 Economy | 🔶 IN PROGRESS (⚠️ blocked-chained) | T-301 ✅ engine · T-303 ✅ engine (140/140) · T-302 🔒 §9 save-format decision · T-304/305/306 menunggu T-302 |
-| VS-2a First House | ⚠️ CONDITIONAL (engine ✅) | T-201 ✅ · T-202..T-208 ✅ engine · visual evidence BLOCKED (132/132 suite, dayP95 0.74ms) |
+| VS-3 Economy | 🔶 IN PROGRESS | T-301 ✅ · T-303 ✅ (`evidence/vs3-t303-budget-panel.png`) · T-302 🔒 §9 save-format decision · T-304/305/306 menunggu T-302 |
+| VS-2a First House | ✅ DONE | T-201..T-208 ✅ · `evidence/vs2a-*.png` (8 capture) · suite 142/142 · e2e 8/8 · dayP95 ≤ budget |
 | VS-2b..VS-7 | ⬜ QUEUED | — |
+
+## VS-2a evidence pass (2026-09-19 #12)
+
+- **Browser unblocked in the sandbox:** Playwright CDNs stay ECONNRESET, but the npm registry is reachable, so a
+  Chromium 153 build shipped as an npm package (`@sparticuz/chromium`, installed in `/tmp`, NOT a project
+  dependency) runs headless with WebGL2 via ANGLE/SwiftShader. `playwright.config.ts` reads `PW_CHROMIUM_PATH`
+  and applies the serverless flag set (no zygote, in-process GPU; **not** `--single-process`, which killed the
+  browser after every WebGL page). Managed-Chromium behaviour unchanged when the env var is unset.
+- `e2e/vs2a-evidence.spec.ts`: real-browser playthrough (seed 25) — R/C zoned → Pop 36 @ D13 → I zoned → month
+  tick (Δtreasury ≡ income − upkeep + subsidy, asserted exactly) → V overlay (value near I < near R) → B panel
+  (numbers = ledger) → save → reload → load (hash-equal) → continue. Screens: `evidence/vs2a-t202-before.png`,
+  `vs2a-t202-after-pop-hud.png`, `vs2a-t203-houses-closeup.png`, `vs2a-t204-no-road-icon.png`,
+  `vs2a-t205-month-tick-hud.png`, `vs2a-t207-value-overlay.png`, `vs3-t303-budget-panel.png`,
+  `vs2a-gate-loaded.png`. All human-inspected. `npm run e2e` 8/8 (vs1 6 + vs2a + evidence) in 4.5 min.
+- **Capture-found bugs, all fixed with RED→GREEN tests:**
+  1. `view/buildings.ts` + `view/icons.ts` never refreshed the InstancedMesh bounding sphere after `setMatrixAt`
+     → three.js culled the whole layer once the camera left the world origin (icons vanished in the T-204
+     close-up, draws 4→3). New `view/instancing.ts` (expand on place, refresh on remove/sync/grow) +
+     `instancing.test.ts` (frustum away from origin must still intersect the mesh).
+  2. `BudgetPanel` Net = income − gross upkeep, but the treasury moves by income − (gross − Frontier subsidy):
+     `MonthLedger.subsidy` now flows through `snapshot.lastMonth/history`, panel shows the subsidy row,
+     `economy.test.ts` asserts Δbalance ≡ income − expense + subsidy. Escape now closes the panel.
+  3. `Sim.loadState` did not recompute derived demand; growth reads demand *before* the daily recompute, so the
+     first post-load day used the bootstrap vector (HUD showed C +2 vs +3 pre-save). `codec.test.ts` now
+     asserts `demand.target()` equality after load.
+- UX: F3 overlay moved to bottom-left (the grown TopBar hid the treasury behind it); `View.focusTile` /
+  `CameraRig.focus` added (evidence framing now, click-to-locate in T-605).
+- **Balancing observation (owner T-304/T-305, not a blocker):** the v0 growth pass gives its single daily spawn to
+  the highest-demand zone (bootstrap I +17 > R +7 > C +2) — a city zoned R+C+I on day 1 builds ~all I lots
+  before the first house. The evidence playthrough zones R first (UJ-01 order); the jobs→R coupling in T-305 is
+  the canonical remedy.
+- Sandbox notes: SwiftShader ≈ 4 fps (frame clamp 250 ms) — specs fast-forward the sim synchronously through
+  `sim.update(250)` instead of waiting on wall-clock speed; first-frame shader compile can exceed 5 s (vs1 F3
+  assertion timeout raised to 30 s); Playwright wipes `test-results/` per run → accepted PNGs are copied to
+  `docs/05-execution/evidence/`.
 
 ## T-207 notes (2026-09-19 #8)
 
@@ -196,14 +232,24 @@ Estimates: none currently open. GPU frame-rate is NOT YET MEASURED (sandbox has 
 
 ## How to run
 
-`npm run ci` (lint+arch+licenses+typecheck+test+build) · `npm run e2e` · `npm run perf` · `npm run dev` → http://localhost:5173 (`?seed=11&preset=bay` for fixed maps).
+`npm run ci` (lint+arch+licenses+typecheck+test+build) · `npm run e2e` · `npm run perf` · `npm run dev` → http://localhost:5180 (`?seed=11&preset=bay` for fixed maps).
+
+**E2E in a sandbox without Playwright's browser download** (npm registry reachable, CDNs blocked):
+
+```sh
+mkdir -p /tmp/chromium-probe && cd /tmp/chromium-probe && npm init -y >/dev/null && npm i @sparticuz/chromium@153.0.0
+node -e "import('@sparticuz/chromium').then(async m=>{console.log(await m.default.executablePath()); await m.inflate('/tmp/chromium-probe/node_modules/@sparticuz/chromium/bin/al2023.tar.br')})"
+cd <repo> && PW_CHROMIUM_PATH=/tmp/chromium LD_LIBRARY_PATH=/tmp/al2023/lib FONTCONFIG_PATH=/tmp/fonts npm run e2e
+```
+
+(Chromium 153 matches Playwright 1.63's expected build; the `al2023` lib bundle supplies libnss3/libnspr4.)
 
 ## Known limitations (VS-1 exit)
 
 - No GPU in sandbox: real frame-rate, and the 10-min visual soak, are unmeasured (tracked for VS-5).
-- **(2026-09-19 #3) No browser in sandbox AND no Playwright CDN access** (ECONNRESET): E2E/visual/screenshot
-  evidence is BLOCKED for VS-2a; unit/sim/persistence evidence substitutes until a browser-capable machine
-  runs the gate. `vite.config.ts` now sets `allowedHosts: true` for proxied previews.
+- **(2026-09-19 #3 → resolved #12)** Playwright CDN still unreachable, but an npm-distributed Chromium runs
+  headless with SwiftShader WebGL2 (see How to run) — E2E/visual evidence is no longer blocked.
+  `vite.config.ts` sets `allowedHosts: true` for proxied previews.
 - E2E is slow (~4 min, SwiftShader); consider a `?size=64` fast-boot param if VS-2 suites grow.
 - Binary save-corpus files deferred to VS-7 migration gate (codec forward-compat covered by unit test).
 - `world.ts` is 326 lines (soft-cap 300 warn); split when systems land (VS-3+).

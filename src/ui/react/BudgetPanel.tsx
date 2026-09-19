@@ -10,7 +10,9 @@ import type { SimSnapshot } from '../../shared/types.js';
 export function BudgetPanel({ snapshot, onClose }: { snapshot: SimSnapshot; onClose: () => void }): JSX.Element {
   const m = snapshot.lastMonth;
   const history = snapshot.history;
-  const net = m.income - m.expense;
+  // Net ≡ what the treasury actually moved: income − gross upkeep + the Frontier subsidy share
+  // the city did not pay (docs/02 §4 / docs/05 B6). Omitting the subsidy overstated the loss.
+  const net = m.income - m.expense + m.subsidy;
   const maxV = Math.max(1, ...history.flatMap((h) => [h.income, h.expense]));
   const W = 220;
   const H = 48;
@@ -34,6 +36,10 @@ export function BudgetPanel({ snapshot, onClose }: { snapshot: SimSnapshot; onCl
             <tr>
               <td>Upkeep — buildings + roads</td>
               <td className="num neg">−${m.expense.toLocaleString('en-US')}</td>
+            </tr>
+            <tr>
+              <td title="Cities under 500 residents pay 70% of upkeep (docs/05 B6)">Frontier subsidy (pop &lt; 500)</td>
+              <td className={`num ${m.subsidy > 0 ? 'pos' : 'dim'}`}>+${m.subsidy.toLocaleString('en-US')}</td>
             </tr>
             <tr className="total">
               <td>Net</td>

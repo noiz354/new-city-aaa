@@ -22,7 +22,9 @@ export class FpsOverlay {
     this.el.id = 'f3-overlay';
     this.el.setAttribute(
       'style',
-      'position:fixed;top:8px;left:8px;z-index:9999;font:11px/1.5 ui-monospace,monospace;' +
+      // Bottom-left: the centred TopBar grew past the F3 box (T-206/T-208 readouts) and hid the
+      // treasury behind it in captures; the bottom-left corner is free (toolbar sits mid-left).
+      'position:fixed;bottom:8px;left:8px;z-index:9999;font:11px/1.5 ui-monospace,monospace;' +
         'color:#b6f5c4;background:rgba(8,12,10,.78);padding:6px 8px;border-radius:6px;' +
         'pointer-events:none;white-space:pre;',
     );

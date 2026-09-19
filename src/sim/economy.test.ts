@@ -53,6 +53,13 @@ describe('T-301 — tax income (docs/02 §4 canonical formula)', () => {
     expect(m.income).toBe(23); // exactly one settled month recorded with the canonical formula
     expect(m.expense).toBeGreaterThan(0);
     expect(sim.economy.balance).toBe(bill0 + m.income - (m.expense - m.subsidy));
+    // HUD contract (T-303 "panel akurat vs sim"): the snapshot ledger carries the subsidy so the
+    // panel's Net (income − expense + subsidy) equals the treasury's real movement.
+    const snap = sim.snapshot();
+    expect(snap.lastMonth).toEqual(m);
+    expect(snap.history).toEqual([m]);
+    expect(m.subsidy).toBeGreaterThan(0); // frontier city (pop 4 < 500) — subsidy is live here
+    expect(snap.balance - bill0).toBe(snap.lastMonth.income - snap.lastMonth.expense + snap.lastMonth.subsidy);
   });
 
   it('12-month ring buffer wraps in order (oldest first)', () => {

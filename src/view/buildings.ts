@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { BuildingSlotData } from '../shared/types.js';
+import { expandInstanceBounds, refreshInstanceBounds } from './instancing.js';
 
 /** Minimal geometry facts the layer needs (structurally satisfied by sim.World). */
 export interface BuildingGeo {
@@ -120,6 +121,8 @@ export class BuildingLayer {
       if (s.state === 0) continue;
       this.apply({ id, x: s.x, y: s.y, state: s.state });
     }
+    refreshInstanceBounds(this.constructionSet.mesh); // drop the pre-sync span from the culling sphere
+    refreshInstanceBounds(this.houseSet.mesh);
   }
 
   dispose(): void {
@@ -174,6 +177,7 @@ export class BuildingLayer {
     set.mesh.count = set.ids.length;
     set.mesh.instanceMatrix.needsUpdate = true;
     if (set.mesh.instanceColor) set.mesh.instanceColor.needsUpdate = true;
+    expandInstanceBounds(set.mesh, m); // culling sphere must include the new instance
   }
 
   private remove(id: number): void {
@@ -202,7 +206,7 @@ export class BuildingLayer {
     set.mesh.count = set.ids.length;
     set.mesh.instanceMatrix.needsUpdate = true;
     if (set.mesh.instanceColor) set.mesh.instanceColor.needsUpdate = true;
-    set.mesh.computeBoundingSphere(); // frustum culling follows the dense span
+    refreshInstanceBounds(set.mesh); // frustum culling follows the dense span
   }
 
   /** Double capacity: rebuild instanced buffers, copy live instances over, free the old ones. */
@@ -226,6 +230,7 @@ export class BuildingLayer {
         }
       }
       next.count = set.ids.length;
+      refreshInstanceBounds(next);
       this.group.remove(set.mesh);
       set.mesh.dispose(); // frees instance attribute buffers only; geometry/material are ours
       set.mesh = next;
