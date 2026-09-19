@@ -17,4 +17,12 @@ export interface UiActions {
   load(slot: SlotId): Promise<void>;
   toggleCamera(): void;
   clearSelection(): void;
+  /** T-207: land-value overlay gradient toggle (V key / TopBar). */
+  toggleValueOverlay(): void;
+  /** T-303: open/close the budget panel. */
+  toggleBudget(): void;
+  /** T-204 FR-C06: why is growth blocked on this lot? (null = not blocked) */
+  growthBlockReason(x: number, y: number): 'unzoned' | 'occupied' | 'no-demand' | 'no-road-access' | null;
+  /** Sim-owned, player-facing text for the no-road-attachment block (FR-C06/VS-2a). */
+  roadAccessReason(): string;
 }

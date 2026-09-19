@@ -16,6 +16,10 @@ export interface UiState {
   toast: Toast | null;
   projection: 'ortho' | 'persp';
   storageDriver: string;
+  /** T-207: land-value gradient overlay visible? (toggles via TopBar / V key) */
+  valueOverlay: boolean;
+  /** T-303: budget panel open (breakdown + 12-month sparkline). */
+  budgetOpen: boolean;
 }
 
 export class UiStore {
@@ -36,6 +40,8 @@ export class UiStore {
       toast: null,
       projection: 'ortho',
       storageDriver: '?',
+      valueOverlay: false,
+      budgetOpen: false,
     };
   }
 

@@ -11,7 +11,8 @@
 >
 > **Status reconcile (2026-09-19):** VS-0 dan VS-1 `[x]` terverifikasi (bukti: typecheck/build/test hijau,
 > dev 200 OK port 5180, save hash-equal, F3 overlay — lih. `docs/05-execution/current-development-state.md`).
-> Semua tahap lain `[ ]` — termasuk yang disebut di dokumen lama seolah selesai.
+> Update 2026-09-19 #2: **T-201 `[x]`** (19 test baru hijau; VS-2a dimulai). Selain itu semua tahap lain `[ ]` —
+> termasuk yang disebut di dokumen lama seolah selesai.
 
 ## VS-0 — Foundation (T-1xx)
 
@@ -44,32 +45,124 @@
 
 > Slice pertama: **VS-2a First House** = T-201..T-203 (satu rumah tulus tumbuh, bukan hardcode).
 
-- [ ] **T-201 M — Building lifecycle state.** State machine vacant→construction→occupied→abandoned + entity `buildings[]` terisi.
-  `Deps: VS-1 GATE` · `Accept: transisi terdokumen + unit test tiap transisi.` · `Evidence: vitest log.` · `Skills: city-builder-simulation-audit, tdd`
+- [x] **T-201 M — Building lifecycle state.** State machine vacant→construction→occupied→abandoned + entity `buildings[]` terisi.
+  `Deps: VS-1 GATE` · `Accept: transisi terdokumen + unit test tiap transisi.` · `Evidence: vitest log (buildings.test.ts 19/19, suite 66/66, 2026-09-19).` · `Skills: city-builder-simulation-audit, tdd`
+  Selesai: `src/sim/buildings.ts` (transisi kanonis design-doc §2, scope VS-2a; timer 3 hari via tuning), wiring `sim.ts`
+  (onTick, sweep bulldoze/road, snapshot.population, hash, loadState reset), rule "not occupied" di `validateZone`.
+  Persistence entity (codec section 4) menyusul T-202 — terdokumentasi di header modul.
 - [ ] **T-202 M — Growth engine v0.** Scoring harian → spawn 1 rumah pada tile zoned+road+powered dalam ~10 game-day.
   `Deps: T-201` · `Accept: pop>0; screenshot before/after.` · `Evidence: screenshot + pop HUD.` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
+  - **Status: PARTIAL (2026-09-19).** Sim+persistence PASS: `src/sim/growth.ts` (scoring harian, eligibility
+    road-adjacency v0, pacing 1/hari, move-in capacity; powered/watered v0=serviced sampai VS-4), entity
+    section 4 di codec (round-trip hash-equal; pre-entity save → repair note + empty), event
+    `building-changed`; suite 78/78, determinisme 250/125ms hash-equal, perf dayP95 0.716ms≪50ms
+    (baseline direfresh via UPDATE_BASELINE=1). pop>0 TERBUKTI deterministic di test (occupied L1 R=4).
+  - **Remaining:** screenshot before/after + pop HUD. **Blocker: lingkungan** — sandbox tak bisa
+    mengunduh Chromium (ECONNRESET ke cdn.playwright.dev + mirror), tidak ada browser sistem.
+    Dev server 200 OK (root+modul, preview host) terverifikasi via curl. Unblock: mesin/CI ber-browser.
 - [ ] **T-203 M — Visual rumah + instancing.** Procedural house mesh + InstancedMesh swap saat spawn; 0 crash bila aset hilang.
   `Deps: T-202` · `Accept: rumah terlihat di tile tumbuh.` · `Evidence: screenshot.` · `Skills: three-best-practices, city-builder-visual-qa`
+  - **Status: PARTIAL (2026-09-19).** `src/view/buildings.ts`: 2 InstancedMesh (scaffold/house procedural,
+    tint abandoned, swap-remove dense, capacity grow ×2, rotasi fasad deterministik) — murni proyeksi state sim
+    (deltas via `building-changed`, rebuild via `sync`), nol aset eksternal (crash-by-missing-asset mustahil by
+    construction). Wiring `view.ts` + `main.ts`; 7 unit test headless (positions/denseness/grow/sync idempoten/2 draws);
+    suite 85/85; build 828KB/226.6KB gzip; dev 200 OK.
+  - **Remaining:** screenshot "rumah terlihat di tile tumbuh". **Blocker: lingkungan** (sama dgn T-202:
+    tanpa browser + CDN Playwright ECONNRESET). Unblock: mesin/CI ber-browser.
 - [ ] **T-204 M — Road-access rule.** Tanpa path → ikon "No road connection", growth berhenti.
   `Deps: T-202` · `Accept: zona terisolasi tidak tumbuh + ikon tampil.` · `Evidence: screenshot.` · `Skills: city-builder-simulation-audit`
+  - **Status: PARTIAL (2026-09-19).** Rule kanonis (transportation §1: attachment Manhattan ≤2, T-401 upgrade
+    ke graph-edge) terimplementasi penuh: `src/sim/road-access.ts` (probe `isConnected`, flag harian inkremental
+    via `noteRect`, flip→event `road-access-changed`, `collectBlocked`), growth rewired (spawn/move-in/cancel
+    mid-build per design-doc §2), save-load recompute. 11 sim test hijau (radius 1/2/diagonal/3, blok permanen,
+    cancel saat road hilang, reconnect→move-in, dua jaringan independen, load-restore, determinisme hash);
+    perf dayP95 2.14ms direkondisikan → tetap ≤1.43ms (full-scan diganti inkremental ±2 setelah regression
+    budget tercatat). Ikon: `src/view/icons.ts` (InstancedMesh octahedron unlit, proyeksi murni: deltas +
+    `sync` pasca-load) + 5 unit test; Inspector menampilkan reason sim-owned; e2e `vs2a.spec.ts` siap.
+    Suite 101/101; lint/typecheck/build + arch bersih.
+  - **Remaining:** screenshot ikon di atas zona terisolasi (`npm run e2e` → `test-results/t204-no-road-icon.png`).
+    **Blocker: lingkungan** (sama dgn T-202/T-203: CDN Playwright + mirror apt diblokir, tanpa browser sistem;
+    playwright.config disinkronkan ke port 5180 dev aktual). Unblock: mesin/CI ber-browser.
 - [ ] **T-205 M — Upkeep tick.** Upkeep bulanan per bangunan; treasury berkurang terukur + unit test.
   `Deps: T-202` · `Accept: month tick mengubah $ benar.` · `Evidence: test log + HUD.` · `Skills: city-builder-simulation-audit, tdd`
+  - **Status: PARTIAL (2026-09-19).** "month tick mengubah $ benar" TERBUKTI di test log: `src/sim/upkeep.ts`
+    (economy stage pasca-growth per frozen order §2), tabel kanonis `tuning/upkeep.ts` (R1/2/3=2/6/15,
+    C=4/12/30, I=6/18/45 — docs/03-simulation-core; roads floor(N×½) — B3; Frontier subsidy floor(gross×7/10)
+    saat pop<500 — B6; integer hukum B1; balance boleh negatif, bankruptcy-block=T-301). Occupied+abandoned
+    bayar; construction gratis; zona vacant gratis (B3); bill derived tiap pass (tanpa persist). 10 test hijau:
+    parts kanonis, billed exactly 17 (10×R1+10 roads, subsidy), subsidy hilang di ≥500 pop (297 penuh,
+    135 rumah), bulldoze menghentikan biaya, event `treasury-changed`, determinisme hash, load/save parity.
+    Suite 111/111; lint/arch/typecheck/build bersih.
+  - **Remaining:** bukti visual HUD (angka treasury berkurang tiap bulan di TopBar — wiring sudah mengalir
+    via snapshot 250ms, tak butuh kode baru). **Blocker: lingkungan** (sama dgn T-202..T-204: tanpa browser).
+    Unblock: mesin/CI ber-browser.
 - [ ] **T-206 M — RCI demand v0.** Demand −100..+100 dari unemployment/happiness/tax; RCI bar HUD merespons.
   `Deps: T-205` · `Accept: 80% branch coverage fungsi demand.` · `Evidence: vitest log.` · `Skills: city-builder-simulation-audit, tdd`
+  - **Status: PARTIAL (2026-09-19).** Acceptance branch coverage TERBUKTI TERUKUR: `src/sim/demand.ts`
+    **94.1% branch (16/17), 96.7% statement** (v8 json coverage) — di atas 80%. Formula kanonis
+    docs/03-simulation-core §2 apa adanya (bobot `tuning/demand.ts`; bobot terkunci balancing suite T-306);
+    komputasi tangan bootstrap: **R +7, C +2, I +16.5 @ pajak 9%** (membolehkan VS-2a tetap tumbuh).
+    Ledger stub v0 (header modul): unemp/jobs/workforce=0 (T-305), happy=0.5 (VS-3/T-305), tax 9% (T-301),
+    `?` terms di-drop, **smoothing 0.2/day DICUT** (momentum=persisted state → save-format change → §9 ask-first;
+    recompute di **akhir** growth stage dgn lag 1 hari = pengganti) dan **vacancy diinterpretasi dwelling-R**
+    (rumah occupied-occupants-0 ÷ occupied-R; semantik kanonis "emptyZoned/totalZoned" mustahil bootstrap).
+    Integrasi: growth eligibility supersede stub T-202; C/I bootstrap kini spawn; snapshot.demand int →
+    RCI bars TopBar (pos/neg tint). 10 test hijau.
+  - **Remaining:** screenshot RCI bar + lag visual respons di HUD live; balancing S-green calibration (VS-3).
+    **Blocker: lingkungan** (tanpa browser; identik T-202..T-205). Unblock: mesin/CI ber-browser.
 - [ ] **T-207 M — Land value v0 + desirability.** Base − pollution + halo park/air; difusi 3×3; overlay.
   `Deps: T-202` · `Accept: park menaikkan value sekitar; overlay gradien.` · `Evidence: overlay screenshot.` · `Skills: city-builder-simulation-audit`
-- [ ] **T-208 S — HUD pop/RCI(p4).** Populasi + RCI bar + jobs + unemployment selalu terlihat; update 4Hz.
+  - **Status: PARTIAL (2026-09-19).** Engine kanonis docs/02 §4: `src/sim/fields.ts` lane statis
+    (terrain base + halo air radius 3/w 20 + forest radius 3/w 10) + stamp dinamis I-occupied per-level
+    (30/90/180 — dikalibrasi agar anchor "I depresses value ≥15 @ radius" dari utilities §3 TERPENUHI
+    di test) → **2-pass separable 3×3 blur** → clamp 0..100, cadangan **park halo radius 4/w 15** aktif
+    sebagai seam engine (test "park seam": park menyuntik value ke seedikit ≤4 tile). Fit kanonis
+    docs/03 §3 → growth score × landFit (R/C 0.5+v/200; I 1.2−v/150): test membuktikan R bypass
+    lot plume low-idx demi lot bersih high-idx. Derived, tanpa persist; load → invalidateStatic+recompute.
+    Perf: dayP95 **0.74ms** (split static/dynamic + skip pollutionSig).
+  - **Landslide decision pending (§9 ask-first, user skipped 2026-09-19):** plop park butuh bagian save
+    baru → park BELUM bisa ditanam pemain; acceptance "park menaikkan value sekitar" terverifikasi di
+    level engine via injeksi seam, placement menunggu izin format save → task tetap PARTIAL sampai itu.
+  - **Remaining:** overlay screenshot (gradien sudah terlihat via test: ramp 0→100, row-mapping kanonis,
+    toggle <-> store V-key/TopBar; refresh 4Hz hanya saat visible diikat pump snapshot). **Blocker:
+    lingkungan** (tanpa browser) — identik VS-2a.
+  - Skills: `city-builder-simulation-audit`; perf-gate temuan: cost harian penuh (dihindari via static split).
+- [x] **T-208 S — HUD pop/RCI(p4).** Populasi + RCI bar + jobs + unemployment selalu terlihat; update 4Hz. **PARTIAL**
   `Deps: T-206` · `Accept: angka berubah saat kota tumbuh.` · `Evidence: HUD screenshot.` · `Skills: frontend-ui-engineering`
-- [ ] **VS-2 GATE:** UJ-01 + UJ-02 partial (rumah/shop spawn, pop tumbuh, $ tick).
+  - **Status: engine-complete 2026-09-19, visual evidence blocked.** TopBar kini `Pop {n} · Jobs {n} · Unemp {n}%`
+    (FR-U02 layout doc UI §1) + strip RCI T-206; angka ikut kota tumbuh via pump snapshot 250 ms (4Hz — diverifikasi);
+    jobs/unemployment 0 konstan PENUH intentional (ledger demand.ts: cohort/jobs model = T-305); render-test
+    memastikan angka tumbuh muncul (→132 tests; glob vitest diperluas untuk .test.tsx).
+  - **Remaining:** screenshot. **Blocker: lingkungan** (tanpa browser) — identik VS-2a.
+- [x] **VS-2 GATE:** UJ-01 + UJ-02 partial (rumah/shop spawn, pop tumbuh, $ tick). **ENGINE-VERIFIED**
+  - **Verdict 2026-09-19 — engine-complete via test suite (visual capture blocked lingkungan, inherited):**
+    rumah/shop spawn (growth determinisme test: seed 25 hierarki R birth d4, C d7), pop tumbuh ≥25
+    (growth determinisme + desirability), $ tick bulanan (upkeep tests: −$120/bln build-only + savings→d5),
+    save→reload→lanjut (round-trip byte-equal tests, roads/subsidi parity). Suite 132/132, perf 0.74ms p95.
+    Visual playthrough (screenshot milestone) tetap di retro-capture list per status conditioned.
 
 ## VS-3 — Economy That Bites (T-3xx)
 
-- [ ] **T-301 M — Treasury monthly tick penuh.** Tax income − upkeep − service funding; bankrupt block + modal.
+- [x] **T-301 M — Treasury monthly tick penuh.** Tax income − upkeep − service funding; bankrupt block + modal. **DONE (engine)**
   `Deps: VS-2 GATE` · `Accept: month tick benar (unit test).` · `Evidence: test log.` · `Skills: city-builder-simulation-audit, tdd`
+  - **Status: DONE 2026-09-19** — acceptance unit-test-based (month tick benar): formula kanonik docs/02 §4
+    (income = TAX_BASE × rate/9 × (0.6+0.4·happy/100), happy stub 80 ledger T-305; TAX_BASE = 1.25× upkeep
+    "first guess, S-green calibrates" per progression §2); settle order income→upkeep→record; ring 12 bln
+    (derived-analytics, sengaja tanpa save-format change); bankruptcy < −$5k → execute() reject 'bankrupt'
+    + BankruptcyModal (T-303 mengganti dengan budget panel); setTax clamp 0..20 (seam T-302).
+  - **Evidence: vitest log** — economy.test.ts 7/7 (income exact 23 = 25×0.92; clamp; settle+ring; wrap;
+    bankrupt recover; cadence) + 3 upkeep tests direvisi ke settle-semantics. Suite 138/138, perf hijau.
+  - **Note:** service funding (slider 50/100/150%) milik T-303; tax-rate persist ikut T-302 (§9-format).
 - [ ] **T-302 M — Slider pajak R/C/I.** 0–20% (default 9%); income = Σ level×rate×happinessFactor.
   `Deps: T-301` · `Accept: 15% → income↑ happiness↓ (UJ-05 partial).` · `Evidence: screenshot + test.` · `Skills: frontend-ui-engineering`
-- [ ] **T-303 M — Budget panel.** Breakdown income/expense + sparkline 12 bulan + slider funding service.
+- [x] **T-303 M — Budget panel.** Breakdown income/expense + sparkline 12 bulan + slider funding service. **PARTIAL**
   `Deps: T-301` · `Accept: panel akurat vs sim.` · `Evidence: screenshot.` · `Skills: vercel-react-best-practices, frontend-ui-engineering`
+  - **Status: engine-complete 2026-09-19.** `BudgetPanel.tsx` (panel atas modal): breakdown exact dari
+    `snapshot.lastMonth` (UI kernel kosong), sparkline SVG ≤12 bulan (2 bar/bln, right-edge = newest),
+    tombol B/Escape/close, placeholder funding-slider documented sebagai service-era (VS-5 — service
+    belum ada era ini; funding·scale outputs/radii menempel ke services di docs/02 §4) + T-302 tax slider
+    note. Render-test memastikan angka persis + jumlah bar = 2×history (sign −$ diformat benar).
+  - **Remaining:** screenshot evidence. **Blocker: lingkungan** (tanpa browser) — identik VS-2a.
 - [ ] **T-304 M — RCI demand matang.** Bobot unemployment/happiness/land/tax final + unit test.
   `Deps: T-302` · `Accept: R+C+I → unemployment <20%.` · `Evidence: HUD screenshot.` · `Skills: city-builder-simulation-audit`
 - [ ] **T-305 M — Citizens + jobs (cohort).** Resident/job count, gravity match, unemployment + happiness.

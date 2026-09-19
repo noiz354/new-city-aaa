@@ -3,18 +3,25 @@
 import type {
   Command,
   CommandResult,
+  SaveEntities,
   SaveLayers,
   SaveMeta,
   SimEvent,
   SimSnapshot,
 } from '../shared/types.js';
 import { fnv1aBytes } from '../shared/crc32.js';
-import { Clock } from './clock.js';
+import { Buildings } from './buildings.js';
+import { Clock, TICKS_PER_DAY, TICKS_PER_MONTH } from './clock.js';
+import { Demand } from './demand.js';
+import { Fields } from './fields.js';
 import { normalizeRect } from '../shared/grid.js';
 import { applyBulldoze, applyRoad, applyZone, validateBulldoze, validateRoad, validateZone } from './commands.js';
 import { Economy } from './economy.js';
+import { Growth } from './growth.js';
+import { RoadAccess } from './road-access.js';
 import { Rng } from './rng.js';
 import { CHUNK } from '../shared/types.js';
+import { Upkeep } from './upkeep.js';
 import { World, type TerrainPreset } from './world.js';
 
 export interface SimOptions {
@@ -29,6 +36,12 @@ export class Sim {
   readonly clock: Clock;
   readonly economy: Economy;
   readonly rng: Rng;
+  readonly buildings: Buildings; // T-201: authoritative building lifecycle store
+  readonly growth: Growth; // T-202: daily scoring → spawn + move-in
+  readonly roadAccess: RoadAccess; // T-204: canonical attachment flags (derived truth)
+  readonly upkeep: Upkeep; // T-205: monthly per-building/road upkeep (economy stage)
+  readonly demand: Demand; // T-206: FR-S02 RCI demand, recomputed daily (derived)
+  readonly fields: Fields; // T-207: land value + landFit (fields stage, derived)
   private events: SimEvent[] = [];
 
   constructor(opts: SimOptions = {}) {
@@ -36,6 +49,13 @@ export class Sim {
     this.clock = new Clock(opts.now ?? (() => 0));
     this.economy = new Economy();
     this.rng = new Rng(this.world.seed ^ 0x51ed2709);
+    this.buildings = new Buildings(this.world);
+    this.roadAccess = new RoadAccess(this.world);
+    this.demand = new Demand(this.world, this.buildings);
+    this.fields = new Fields(this.world, this.buildings);
+    this.fields.recompute(); // fields valid from t=0 (growth scores read them day 1)
+    this.growth = new Growth(this.world, this.buildings, this.roadAccess, this.demand, this.fields);
+    this.upkeep = new Upkeep(this.world, this.buildings, this.economy);
   }
 
   update(realDtMs: number): void {
@@ -43,19 +63,49 @@ export class Sim {
   }
 
   protected onTick(tick: number): void {
-    void tick;
-    // VS-1: time flows; no systems yet. VS-2+ hooks: growth, traffic, economy.
+    // Frozen tick order (simulation-architecture §2): growth stage. Lifecycle timers first,
+    // then the daily growth pass at the day boundary (heavy systems on day boundaries only).
+    this.buildings.onTick(tick);
+    if (tick % TICKS_PER_DAY === 0) {
+      this.growth.onDay(tick);
+      // Demand recomputes AT THE END of the growth stage (post completion + move-in);
+      // see the T-206 stub ledger in demand.ts for why (doc smoothing cut → §9 ask-first).
+      this.demand.recompute();
+      // Fields stage (frozen order: growth → fields-commit → economy): land value follows
+      // today's buildings/terrain; growth scores consume it with the same one-day lag.
+      this.fields.recompute();
+    }
+    // Economy stage AFTER growth (frozen order: … → growth → fields-commit → economy(monthly)).
+    if (tick % TICKS_PER_MONTH === 0 && tick > 0) {
+      const income = this.economy.collectTax(this.buildings); // T-301 docs/02 §4
+      if (income > 0) this.economy.add(income);
+      const bill = this.upkeep.onMonth();
+      this.economy.recordMonth(income, bill.gross, bill.gross - bill.net); // history ring (T-301; feed T-303)
+      if (income > 0 || bill.net !== 0) {
+        this.events.push({ type: 'treasury-changed', balance: this.economy.balance });
+      }
+    }
   }
 
   execute(cmd: Command): CommandResult {
+    // docs/02 §4 bankruptcy contract: below the limit only free commands may proceed
+    // (all current command kinds are paid; the blocking reason feeds the banned-commands modal).
+    if (this.economy.isBankrupt()) return { ok: false, reason: 'bankrupt' };
     let res: CommandResult;
     if (cmd.kind === 'place-road') {
       const v = validateRoad(this.world, this.economy, cmd.path);
       if (!v.ok || !v.plan) res = v;
       else {
+        for (const t of v.plan.newTiles) this.buildings.demolishAt(t.x, t.y); // road clears buildings
         const applied = applyRoad(this.world, v.plan);
         this.economy.spend(v.cost);
         res = { ok: true, cost: v.cost, tiles: applied };
+        let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
+        for (const t of cmd.path) {
+          if (t.x < x0) x0 = t.x; if (t.x > x1) x1 = t.x;
+          if (t.y < y0) y0 = t.y; if (t.y > y1) y1 = t.y;
+        }
+        if (x1 >= x0) this.roadAccess.noteRect({ x0, y0, x1, y1 }); // attachment may change around new road
         this.emitChunksFor(cmd.path);
       }
     } else if (cmd.kind === 'paint-zone') {
@@ -65,15 +115,18 @@ export class Sim {
         const applied = applyZone(this.world, v.plan, cmd.zone);
         this.economy.spend(v.cost);
         res = { ok: true, cost: v.cost, tiles: applied };
+        this.roadAccess.noteRect(cmd.rect, 0); // zone paint changes which tiles need flags
         this.emitChunksForRect(cmd.rect);
       }
     } else {
       const v = validateBulldoze(this.world, this.economy, cmd.rect);
       if (!v.ok || !v.plan) res = v;
       else {
+        for (const t of v.plan.tiles) this.buildings.demolishAt(t.x, t.y); // bulldoze demolishes first
         const applied = applyBulldoze(this.world, v.plan);
         this.economy.spend(v.cost);
         res = { ok: true, cost: v.cost, tiles: applied };
+        this.roadAccess.noteRect(cmd.rect); // road loss may de-attach neighbours ±2
         this.emitChunksForRect(cmd.rect);
       }
     }
@@ -115,6 +168,12 @@ export class Sim {
   }
 
   drainEvents(): SimEvent[] {
+    for (const c of this.buildings.drainChanges()) {
+      this.events.push({ type: 'building-changed', id: c.id, x: c.x, y: c.y, state: c.state });
+    }
+    for (const c of this.roadAccess.drainChanges()) {
+      this.events.push({ type: 'road-access-changed', x: c.x, y: c.y, blocked: c.blocked });
+    }
     const out = this.events;
     this.events = [];
     return out;
@@ -125,7 +184,21 @@ export class Sim {
       tick: this.clock.tick,
       date: this.clock.date(),
       balance: this.economy.balance,
-      population: 0,
+      population: this.buildings.population(),
+      demand: {
+        r: Math.round(this.demand.target().r),
+        c: Math.round(this.demand.target().c),
+        i: Math.round(this.demand.target().i),
+      },
+      // T-208: jobs/unemployment 0 per demand.ts's T-305 cohort ledger (visible-but-honest zeros).
+      jobs: 0,
+      unemployment: 0,
+      bankrupt: this.economy.isBankrupt(),
+      lastMonth: (() => {
+        const m = this.economy.lastMonth();
+        return { income: m.income, expense: m.expense };
+      })(),
+      history: this.economy.history().map((m) => ({ income: m.income, expense: m.expense })),
       size: this.world.size,
       seed: this.world.seed,
       paused: this.clock.paused,
@@ -153,11 +226,20 @@ export class Sim {
     return this.world.toLayers();
   }
 
-  loadState(meta: SaveMeta, layers: SaveLayers): void {
+  getSaveEntities(): SaveEntities {
+    return this.buildings.serialize();
+  }
+
+  loadState(meta: SaveMeta, layers: SaveLayers, entities?: SaveEntities): void {
     if (meta.worldSize !== this.world.size) {
       throw new Error(`save size ${meta.worldSize} != world size ${this.world.size} (resize unsupported)`);
     }
     this.world.loadLayers(layers, meta.worldSeed);
+    if (entities !== undefined) this.buildings.deserialize(entities);
+    else this.buildings.reset(); // pre-T-202 saves carry no entity section → restore empty (repair note)
+    this.roadAccess.recomputeForLoad(this.buildings); // derived flags follow the restored layers silently
+    this.fields.invalidateStatic(); // restored terrain bytes → rebuild static base
+    this.fields.recompute(); // land value is derived; rebuilt from restored world+buildings
     const speed = meta.speed === 0 || meta.speed === 1 || meta.speed === 2 || meta.speed === 3 ? meta.speed : 1;
     this.clock.setState({ tick: meta.tick, accumulator: meta.accumulator, speed });
     this.economy.balance = meta.balance;
@@ -178,6 +260,7 @@ export class Sim {
     dv.setUint32(20, meta.worldSeed, true);
     let h = fnv1aBytes(head);
     for (const part of this.world.hashParts()) h = fnv1aBytes(part, h);
+    h = this.buildings.hashInto(h);
     return h >>> 0;
   }
 }

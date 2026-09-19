@@ -11,11 +11,13 @@ export function TopBar({
   projection,
   driver,
   actions,
+  valueOverlay,
 }: {
   snapshot: SimSnapshot;
   projection: 'ortho' | 'persp';
   driver: string;
   actions: UiActions;
+  valueOverlay: boolean;
 }): JSX.Element {
   const d = snapshot.date;
   const speeds: { label: string; value: 0 | 1 | 2 | 3 }[] = [
@@ -31,7 +33,15 @@ export function TopBar({
         {money(snapshot.balance)}
       </span>
       <span className="stat dim" title="Population">
-        Pop {snapshot.population.toLocaleString('en-US')}
+        Pop {snapshot.population.toLocaleString('en-US')} · Jobs {snapshot.jobs.toLocaleString('en-US')} · Unemp {(snapshot.unemployment * 100).toFixed(0)}%
+      </span>
+      {/* T-206 FR-S02: the canonical RCI bars mirror sim.demand (sim truth, no UI kernel). */}
+      <span className="rci" role="group" aria-label="RCI demand">
+        {(['r', 'c', 'i'] as const).map((k) => (
+          <span key={k} className={`rci-${k} ${snapshot.demand[k] >= 0 ? 'pos' : 'neg'}`} title={`${k.toUpperCase()} demand`}>
+            {k.toUpperCase()} {snapshot.demand[k] > 0 ? `+${snapshot.demand[k]}` : snapshot.demand[k]}
+          </span>
+        ))}
       </span>
       <span className="stat dim" title={`Tick ${snapshot.tick}`}>
         Y{d.year} M{d.month} D{d.day}
@@ -57,6 +67,14 @@ export function TopBar({
       </button>
       <button onClick={() => actions.toggleCamera()} title="Toggle projection (O)">
         {projection === 'ortho' ? 'Ortho' : 'Persp'}
+      </button>
+      {/* T-207: land-value gradient overlay (FR-S02 context) */}
+      <button
+        className={valueOverlay ? 'on' : ''}
+        onClick={() => actions.toggleValueOverlay()}
+        title="Land value overlay (V)"
+      >
+        Value
       </button>
       <span className="stat dim" title="Save storage driver">
         {driver}

@@ -66,8 +66,10 @@ async function boot(): Promise<void> {
       return;
     }
     const dec = decodeSave(bytes);
-    sim.loadState(dec.meta, dec.layers);
+    sim.loadState(dec.meta, dec.layers, dec.entities ?? undefined);
     view.setWorld(sim.world);
+    view.syncBuildings(sim.buildings.serialize().slots);
+    view.syncIcons(sim.roadAccess.collectBlocked()); // T-204: post-load icon resync
     store.world = sim.world;
     store.set({ snapshot: sim.snapshot(), selectedTile: null });
     store.toast(`Loaded ${slot}${dec.repairs.length > 0 ? ` (${dec.repairs.length} repairs)` : ''}`);
@@ -89,6 +91,18 @@ async function boot(): Promise<void> {
       store.set({ projection: view.projection });
     },
     clearSelection: () => store.set({ selectedTile: null }),
+    // T-207: land-value overlay — toggle flips store state; binds sim truth through
+    // view.attachFields; refresh cadence rides the 250ms snapshot pump below.
+    toggleValueOverlay: () => {
+      const next = !store.getState().valueOverlay;
+      view.attachFields(sim.fields, next);
+      store.set({ valueOverlay: next });
+    },
+    toggleBudget: () => store.set({ budgetOpen: !store.getState().budgetOpen }), // T-303
+    // T-204 FR-C06: sim-owned blocking reason for the Inspector (growth.growthBlockReason
+    // probe; icon layer is the visual twin — both read the same attachment truth).
+    growthBlockReason: (x, y) => sim.growth.growthBlockReason(x, y),
+    roadAccessReason: () => sim.roadAccess.blockedReason(),
   };
 
   new ToolController(view.canvas, view, store, host, actions);
@@ -109,12 +123,13 @@ async function boot(): Promise<void> {
     if (!document.hidden) {
       const t0 = performance.now();
       sim.update(frameMs);
-      sim.drainEvents(); // VS-1: UI polls snapshots; drain bounds queue growth
+      view.applyEvents(sim.drainEvents()); // T-203: building deltas flow into the projection
       simMs = performance.now() - t0;
       snapAcc += frameMs;
       if (snapAcc >= 250) {
         snapAcc = 0;
         store.set({ snapshot: sim.snapshot() });
+        view.refreshLandValue(); // T-207 overlay pump (no-op when hidden)
       }
       const d = sim.clock.date();
       if (d.month === 1 && d.day === 1 && d.year !== lastAutoYear) {

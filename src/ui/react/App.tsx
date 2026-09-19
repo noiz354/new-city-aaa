@@ -1,6 +1,8 @@
 import { useEffect, useSyncExternalStore, type JSX } from 'react';
 import type { UiActions, PriceList } from '../actions.js';
 import type { UiStore } from '../store.js';
+import { BankruptcyModal } from './BankruptcyModal.js';
+import { BudgetPanel } from './BudgetPanel.js';
 import { Inspector } from './Inspector.js';
 import { TopBar } from './TopBar.js';
 import { Toolbar } from './Toolbar.js';
@@ -18,9 +20,11 @@ export function App({ store, actions, prices }: { store: UiStore; actions: UiAct
 
   return (
     <>
-      <TopBar snapshot={s.snapshot} projection={s.projection} driver={s.storageDriver} actions={actions} />
+      <TopBar snapshot={s.snapshot} projection={s.projection} driver={s.storageDriver} actions={actions} valueOverlay={s.valueOverlay} />
       <Toolbar tool={s.tool} previewCost={s.previewCost} previewNote={s.previewNote} actions={actions} prices={prices} />
       <Inspector tile={s.selectedTile} world={store.world} actions={actions} />
+      <BankruptcyModal snapshot={s.snapshot} />
+      {s.budgetOpen && <BudgetPanel snapshot={s.snapshot} onClose={() => actions.toggleBudget()} />}
       {s.toast && (
         <div className="toast panel" key={s.toast.id}>
           {s.toast.text}
