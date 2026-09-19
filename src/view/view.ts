@@ -6,6 +6,7 @@ import { BuildingLayer } from './buildings.js';
 import { CameraRig } from './cameras.js';
 import { FpsOverlay } from './f3.js';
 import { BlockedIconLayer } from './icons.js';
+import { LandValueOverlay, type FieldsView } from './landvalue.js';
 import { GhostLayer, HoverMarker } from './highlight.js';
 import { Picker, type PickResult } from './picking.js';
 import { RoadLayer } from './roads.js';
@@ -26,6 +27,8 @@ export class View {
   private terrain: THREE.Mesh;
   private buildings: BuildingLayer;
   private icons: BlockedIconLayer;
+  private landValueOv: LandValueOverlay;
+  private fields: FieldsView | null = null;
   private readonly f3: FpsOverlay;
 
   constructor(
@@ -47,6 +50,8 @@ export class View {
     this.sceneMgr.scene.add(this.buildings.group);
     this.icons = new BlockedIconLayer(world);
     this.sceneMgr.scene.add(this.icons.group);
+    this.landValueOv = new LandValueOverlay(world);
+    this.sceneMgr.scene.add(this.landValueOv.mesh);
     this.sceneMgr.scene.add(this.hover.group);
     world.chunkDirty.fill(DIRTY_NONE);
     this.ghost = new GhostLayer(this.sceneMgr.scene);
@@ -81,6 +86,13 @@ export class View {
     this.icons.dispose();
     this.icons = new BlockedIconLayer(world);
     this.sceneMgr.scene.add(this.icons.group);
+    this.landValueOv.dispose();
+    this.landValueOv = new LandValueOverlay(world);
+    this.sceneMgr.scene.add(this.landValueOv.mesh);
+    if (this.fields !== null) {
+      this.landValueOv.update(this.fields);
+      this.landValueOv.setVisible(true); // preserve on-state across the load rebuild
+    }
     world.chunkDirty.fill(DIRTY_NONE);
   }
 
@@ -100,6 +112,18 @@ export class View {
   /** Rebuild blocked-attachment markers wholesale (boot + post-load full sync). */
   syncIcons(blocked: TilePos[]): void {
     this.icons.sync(blocked);
+  }
+
+  /** T-207: bind the sim Fields (land value truth) and refresh the texture. */
+  attachFields(fields: FieldsView, visible: boolean): void {
+    this.fields = fields;
+    this.landValueOv.update(fields);
+    this.landValueOv.setVisible(visible);
+  }
+
+  /** 4 Hz refresh while the overlay is on (fields change only at day boundaries anyway). */
+  refreshLandValue(): void {
+    if (this.fields !== null && this.landValueOv.visible) this.landValueOv.update(this.fields);
   }
 
   screenToTile(clientX: number, clientY: number): PickResult | null {
@@ -151,6 +175,7 @@ export class View {
     this.zones.dispose();
     this.buildings.dispose();
     this.icons.dispose();
+    this.landValueOv.dispose();
     this.sceneMgr.dispose();
   }
 }

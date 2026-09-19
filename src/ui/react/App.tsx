@@ -18,7 +18,7 @@ export function App({ store, actions, prices }: { store: UiStore; actions: UiAct
 
   return (
     <>
-      <TopBar snapshot={s.snapshot} projection={s.projection} driver={s.storageDriver} actions={actions} />
+      <TopBar snapshot={s.snapshot} projection={s.projection} driver={s.storageDriver} actions={actions} valueOverlay={s.valueOverlay} />
       <Toolbar tool={s.tool} previewCost={s.previewCost} previewNote={s.previewNote} actions={actions} prices={prices} />
       <Inspector tile={s.selectedTile} world={store.world} actions={actions} />
       {s.toast && (

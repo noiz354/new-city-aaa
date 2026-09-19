@@ -13,6 +13,7 @@ import { fnv1aBytes } from '../shared/crc32.js';
 import { Buildings } from './buildings.js';
 import { Clock, TICKS_PER_DAY, TICKS_PER_MONTH } from './clock.js';
 import { Demand } from './demand.js';
+import { Fields } from './fields.js';
 import { normalizeRect } from '../shared/grid.js';
 import { applyBulldoze, applyRoad, applyZone, validateBulldoze, validateRoad, validateZone } from './commands.js';
 import { Economy } from './economy.js';
@@ -40,6 +41,7 @@ export class Sim {
   readonly roadAccess: RoadAccess; // T-204: canonical attachment flags (derived truth)
   readonly upkeep: Upkeep; // T-205: monthly per-building/road upkeep (economy stage)
   readonly demand: Demand; // T-206: FR-S02 RCI demand, recomputed daily (derived)
+  readonly fields: Fields; // T-207: land value + landFit (fields stage, derived)
   private events: SimEvent[] = [];
 
   constructor(opts: SimOptions = {}) {
@@ -50,7 +52,9 @@ export class Sim {
     this.buildings = new Buildings(this.world);
     this.roadAccess = new RoadAccess(this.world);
     this.demand = new Demand(this.world, this.buildings);
-    this.growth = new Growth(this.world, this.buildings, this.roadAccess, this.demand);
+    this.fields = new Fields(this.world, this.buildings);
+    this.fields.recompute(); // fields valid from t=0 (growth scores read them day 1)
+    this.growth = new Growth(this.world, this.buildings, this.roadAccess, this.demand, this.fields);
     this.upkeep = new Upkeep(this.world, this.buildings, this.economy);
   }
 
@@ -64,12 +68,12 @@ export class Sim {
     this.buildings.onTick(tick);
     if (tick % TICKS_PER_DAY === 0) {
       this.growth.onDay(tick);
-      // Demand recomputes AT THE END of the growth stage (post completion + move-in):
-      // a freshly completed house's move-in lands within the same boundary pass, so
-      // pre-pass recompute would count it as a spurious one-day vacancy dip. The doc's
-      // smoothing (0.2/day) is cut in v0 (momentum = persisted state, §9 ask-first);
-      // end-of-stage recompute with one-day gate lag is the canonical lag's v0 stand-in.
+      // Demand recomputes AT THE END of the growth stage (post completion + move-in);
+      // see the T-206 stub ledger in demand.ts for why (doc smoothing cut → §9 ask-first).
       this.demand.recompute();
+      // Fields stage (frozen order: growth → fields-commit → economy): land value follows
+      // today's buildings/terrain; growth scores consume it with the same one-day lag.
+      this.fields.recompute();
     }
     // Economy stage AFTER growth (frozen order: … → growth → fields-commit → economy(monthly)).
     if (tick % TICKS_PER_MONTH === 0 && tick > 0) {
@@ -217,6 +221,8 @@ export class Sim {
     if (entities !== undefined) this.buildings.deserialize(entities);
     else this.buildings.reset(); // pre-T-202 saves carry no entity section → restore empty (repair note)
     this.roadAccess.recomputeForLoad(this.buildings); // derived flags follow the restored layers silently
+    this.fields.invalidateStatic(); // restored terrain bytes → rebuild static base
+    this.fields.recompute(); // land value is derived; rebuilt from restored world+buildings
     const speed = meta.speed === 0 || meta.speed === 1 || meta.speed === 2 || meta.speed === 3 ? meta.speed : 1;
     this.clock.setState({ tick: meta.tick, accumulator: meta.accumulator, speed });
     this.economy.balance = meta.balance;

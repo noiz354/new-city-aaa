@@ -11,11 +11,13 @@ export function TopBar({
   projection,
   driver,
   actions,
+  valueOverlay,
 }: {
   snapshot: SimSnapshot;
   projection: 'ortho' | 'persp';
   driver: string;
   actions: UiActions;
+  valueOverlay: boolean;
 }): JSX.Element {
   const d = snapshot.date;
   const speeds: { label: string; value: 0 | 1 | 2 | 3 }[] = [
@@ -65,6 +67,14 @@ export function TopBar({
       </button>
       <button onClick={() => actions.toggleCamera()} title="Toggle projection (O)">
         {projection === 'ortho' ? 'Ortho' : 'Persp'}
+      </button>
+      {/* T-207: land-value gradient overlay (FR-S02 context) */}
+      <button
+        className={valueOverlay ? 'on' : ''}
+        onClick={() => actions.toggleValueOverlay()}
+        title="Land value overlay (V)"
+      >
+        Value
       </button>
       <span className="stat dim" title="Save storage driver">
         {driver}

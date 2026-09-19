@@ -5,9 +5,9 @@
 > Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
 > Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
-- **Updated:** 2026-09-19 #7 (Asia/Jakarta)
-- **HEAD:** T-206 demand commit (see `git log`)
-- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202..T-206 🔶 partial — visual evidence blocked).
+- **Updated:** 2026-09-19 #8 (Asia/Jakarta)
+- **HEAD:** T-207 fields commit (see `git log`)
+- **Slices complete:** VS-0, VS-1. **Active:** VS-2a First House (T-201 ✅, T-202..T-207 🔶 partial — visual evidence blocked; park plop pending §9).
 
 ## Slice status
 
@@ -15,8 +15,33 @@
 |-------|-------|----------|
 | VS-0 Scaffold | ✅ DONE | `evidence/vs0-smoke.png`, CI green, `perf/baseline.json` |
 | VS-1 First tile | ✅ DONE | `evidence/vs1-{boot,built,loaded,persp,bay}.png`, 47 unit + 6 E2E green, coverage 86.6/72.5/82.5 |
-| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ · T-202 🔶 · T-203 🔶 · T-204 🔶 · T-205 🔶 · T-206 🔶 (121/121 suite; branch cov demand 94.1%) |
+| VS-2a First House | 🔶 IN PROGRESS | T-201 ✅ · T-202 🔶 · T-203 🔶 · T-204 🔶 · T-205 🔶 · T-206 🔶 · T-207 🔶 (131/131 suite, dayP95 0.74ms) |
 | VS-2b..VS-7 | ⬜ QUEUED | — |
+
+## T-207 notes (2026-09-19 #8)
+
+- `src/sim/fields.ts` + `tuning/fields.ts`: land value v0 penuh — base per-terrain, halo air (r3 w20),
+  forest/trees (r3 w10), polusi I-occupied per-level (30/90/180 → anchor utilities §3 "depresses ≥15"
+  terverifikasi test), 2-pass separable 3×3 blur harian (fields stage pasca-growth, pre-ekonomi —
+  frozen order §2), clamp 0..100, water pinned 0. Derived tanpa persist; save/load → invalidateStatic
+  + recompute (parity test hijau).
+- **Desirability effects:** growth score × landFit (docs/03 §3) — R/C high-value seekers, I cheap-land;
+  test membuktikan R menghindari sisi plume meski kalah tile-index (tiebreak idx tidak lagi absolut).
+  SPAWN_T + rng jitter belum (full §3 scorer milik upgrade-path; ledger di growth.ts).
+- **Perf engineering (gate-driven):** split staticBase (terrain+halo, rebuild saat load saja) →
+  stamp harian hanya I-occupied; skip via pollutionSig (count×65536 ⊕ Σ(id+1)); bug temuan:
+  signature kosong-vs-id-0 collision menimbulkan skip palsu (test plume menangkapnya).
+  dayP95 2.76 → **0.7365ms** vs budget 1.4312 (results.json terukur).
+- **Park halo:** engine seam + test ("park menaikkan value sekitar" terverifikasi via injeksi).
+  TAPI placement pemain = state persist baru = save-format change → **§9 ask-first diajukan,
+  user skipped 2026-09-19** → T-207 ditahan PARTIAL sampai keputusan; codec section-5 pattern siap.
+- Overlay: `src/view/landvalue.ts` (ramp brown→green cektur, row-mapping ikuti ZoneOverlay, toggle
+  Default hidden; TopBar "Value" + tombol keyboard V; refresh 4Hz via snapshot pump, no-op saat hidden).
+- **Verifikasi:** suite **131/131** (fields 7, landvalue overlay 3) · lint/typecheck/arch(67)/build/perf
+  hijau · determinisme & load parity hijau (derived). e2e screenshot: BLOCKED lingkungan (identik).
+- Catatan lingkungan: .git lokal pernah rollback ke base commit saat snapshot boundary (branch remote
+  tetap utuh); pemulihan FF dari FETCH_HEAD hmk --ff-only (tanpa reset) — moved-work diwuilayahkan
+  pada commit T-207 segera (durability > ukuran).
 
 ## T-206 notes (2026-09-19 #7)
 

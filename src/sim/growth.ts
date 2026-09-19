@@ -13,6 +13,7 @@
 // Deterministic: tile-index scan order, no RNG, no wall clock.
 import { BUILDING_OCCUPIED, BUILDING_CONSTRUCTION, type Buildings } from './buildings.js';
 import type { Demand } from './demand.js';
+import type { Fields } from './fields.js';
 import type { RoadAccess } from './road-access.js';
 import { BUILDING_CAPACITY, GROWTH_TUNING } from './tuning/growth.js';
 import type { World } from './world.js';
@@ -27,12 +28,14 @@ export class Growth {
   private readonly buildings: Buildings;
   private readonly roadAccess: RoadAccess;
   private readonly demand: Demand;
+  private readonly fields: Fields; // T-207: landFit (R/C seek value; I seeks cheap land)
 
-  constructor(world: World, buildings: Buildings, roadAccess: RoadAccess, demand: Demand) {
+  constructor(world: World, buildings: Buildings, roadAccess: RoadAccess, demand: Demand, fields: Fields) {
     this.world = world;
     this.buildings = buildings;
     this.roadAccess = roadAccess;
     this.demand = demand;
+    this.fields = fields;
   }
 
   /** Daily pass. Called by Sim when the tick crosses a day boundary. */
@@ -66,7 +69,9 @@ export class Growth {
         if (z === 0 || (w.building[i] as number) !== -1) continue;
         const demand = this.demand.forZone(z);
         if (demand <= 0 || !this.roadAccess.isConnected(x, y)) continue;
-        candidates.push({ idx: i, score: demand * 100 + GROWTH_TUNING.roadAdjacencyBonus });
+        // score = demand × landFit(zone, value) + road bonus (docs/03 §3; desirability v0
+        // rides land value; SPAWN_T-25 gate + rng jitter arrive with the full §3 scorer).
+        candidates.push({ idx: i, score: demand * 100 * this.fields.landFit(z, x, y) + GROWTH_TUNING.roadAdjacencyBonus });
       }
     }
     candidates.sort((a, b) => b.score - a.score || a.idx - b.idx);

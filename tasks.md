@@ -112,6 +112,21 @@
     **Blocker: lingkungan** (tanpa browser; identik T-202..T-205). Unblock: mesin/CI ber-browser.
 - [ ] **T-207 M — Land value v0 + desirability.** Base − pollution + halo park/air; difusi 3×3; overlay.
   `Deps: T-202` · `Accept: park menaikkan value sekitar; overlay gradien.` · `Evidence: overlay screenshot.` · `Skills: city-builder-simulation-audit`
+  - **Status: PARTIAL (2026-09-19).** Engine kanonis docs/02 §4: `src/sim/fields.ts` lane statis
+    (terrain base + halo air radius 3/w 20 + forest radius 3/w 10) + stamp dinamis I-occupied per-level
+    (30/90/180 — dikalibrasi agar anchor "I depresses value ≥15 @ radius" dari utilities §3 TERPENUHI
+    di test) → **2-pass separable 3×3 blur** → clamp 0..100, cadangan **park halo radius 4/w 15** aktif
+    sebagai seam engine (test "park seam": park menyuntik value ke seedikit ≤4 tile). Fit kanonis
+    docs/03 §3 → growth score × landFit (R/C 0.5+v/200; I 1.2−v/150): test membuktikan R bypass
+    lot plume low-idx demi lot bersih high-idx. Derived, tanpa persist; load → invalidateStatic+recompute.
+    Perf: dayP95 **0.74ms** (split static/dynamic + skip pollutionSig).
+  - **Landslide decision pending (§9 ask-first, user skipped 2026-09-19):** plop park butuh bagian save
+    baru → park BELUM bisa ditanam pemain; acceptance "park menaikkan value sekitar" terverifikasi di
+    level engine via injeksi seam, placement menunggu izin format save → task tetap PARTIAL sampai itu.
+  - **Remaining:** overlay screenshot (gradien sudah terlihat via test: ramp 0→100, row-mapping kanonis,
+    toggle <-> store V-key/TopBar; refresh 4Hz hanya saat visible diikat pump snapshot). **Blocker:
+    lingkungan** (tanpa browser) — identik VS-2a.
+  - Skills: `city-builder-simulation-audit`; perf-gate temuan: cost harian penuh (dihindari via static split).
 - [ ] **T-208 S — HUD pop/RCI(p4).** Populasi + RCI bar + jobs + unemployment selalu terlihat; update 4Hz.
   `Deps: T-206` · `Accept: angka berubah saat kota tumbuh.` · `Evidence: HUD screenshot.` · `Skills: frontend-ui-engineering`
 - [ ] **VS-2 GATE:** UJ-01 + UJ-02 partial (rumah/shop spawn, pop tumbuh, $ tick).

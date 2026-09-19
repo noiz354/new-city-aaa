@@ -91,6 +91,13 @@ async function boot(): Promise<void> {
       store.set({ projection: view.projection });
     },
     clearSelection: () => store.set({ selectedTile: null }),
+    // T-207: land-value overlay — toggle flips store state; binds sim truth through
+    // view.attachFields; refresh cadence rides the 250ms snapshot pump below.
+    toggleValueOverlay: () => {
+      const next = !store.getState().valueOverlay;
+      view.attachFields(sim.fields, next);
+      store.set({ valueOverlay: next });
+    },
     // T-204 FR-C06: sim-owned blocking reason for the Inspector (growth.growthBlockReason
     // probe; icon layer is the visual twin — both read the same attachment truth).
     growthBlockReason: (x, y) => sim.growth.growthBlockReason(x, y),
@@ -121,6 +128,7 @@ async function boot(): Promise<void> {
       if (snapAcc >= 250) {
         snapAcc = 0;
         store.set({ snapshot: sim.snapshot() });
+        view.refreshLandValue(); // T-207 overlay pump (no-op when hidden)
       }
       const d = sim.clock.date();
       if (d.month === 1 && d.day === 1 && d.year !== lastAutoYear) {
