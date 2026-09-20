@@ -9,6 +9,7 @@ import { BlockedIconLayer } from './icons.js';
 import { LandValueOverlay, type FieldsView } from './landvalue.js';
 import { PlantLayer, PowerLineLayer, PowerOverlay, type PowerView, UnpoweredIconLayer } from './power.js';
 import { TowerLayer, UnwateredIconLayer, WaterOverlay, type WaterView } from './watergrid.js';
+import { TrafficOverlay, type TrafficView } from './traffic.js'; // T-403
 import { GhostLayer, HoverMarker } from './highlight.js';
 import { Picker, type PickResult } from './picking.js';
 import { RoadLayer } from './roads.js';
@@ -38,6 +39,8 @@ export class View {
   private towers: TowerLayer; // T-406: water-tower markers
   private waterOv: WaterOverlay; // T-406: pressure tint overlay (hidden by default)
   private water: WaterView | null = null;
+  private trafficOv: TrafficOverlay; // T-403: LOS tint overlay (hidden by default)
+  private traffic: TrafficView | null = null;
   private landValueOv: LandValueOverlay;
   private fields: FieldsView | null = null;
   private readonly f3: FpsOverlay;
@@ -76,6 +79,8 @@ export class View {
     this.sceneMgr.scene.add(this.towers.group);
     this.waterOv = new WaterOverlay(world);
     this.sceneMgr.scene.add(this.waterOv.mesh);
+    this.trafficOv = new TrafficOverlay(world);
+    this.sceneMgr.scene.add(this.trafficOv.mesh);
     this.landValueOv = new LandValueOverlay(world);
     this.sceneMgr.scene.add(this.landValueOv.mesh);
     this.sceneMgr.scene.add(this.hover.group);
@@ -141,6 +146,13 @@ export class View {
     if (this.water !== null) {
       this.waterOv.update(world, this.water);
       this.waterOv.setVisible(true); // preserve on-state across the load rebuild
+    }
+    this.trafficOv.dispose();
+    this.trafficOv = new TrafficOverlay(world);
+    this.sceneMgr.scene.add(this.trafficOv.mesh);
+    if (this.traffic !== null) {
+      this.trafficOv.update(this.traffic);
+      this.trafficOv.setVisible(true); // preserve on-state across the load rebuild
     }
     this.landValueOv.dispose();
     this.landValueOv = new LandValueOverlay(world);
@@ -212,6 +224,18 @@ export class View {
   /** 4 Hz refresh while the overlay is on (power flags change only at day boundaries anyway). */
   refreshPower(): void {
     if (this.power !== null && this.powerOv.visible) this.powerOv.update(this.world, this.power);
+  }
+
+  /** T-403: bind the sim RoadGraph (traffic truth) and refresh the LOS tint. */
+  attachTraffic(traffic: TrafficView, visible: boolean): void {
+    this.traffic = traffic;
+    this.trafficOv.update(traffic);
+    this.trafficOv.setVisible(visible);
+  }
+
+  /** 4 Hz refresh while the overlay is on (volumes change only at day boundaries anyway). */
+  refreshTraffic(): void {
+    if (this.traffic !== null && this.trafficOv.visible) this.trafficOv.update(this.traffic);
   }
 
   /** T-207: bind the sim Fields (land value truth) and refresh the texture. */

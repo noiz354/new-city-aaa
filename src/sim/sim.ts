@@ -35,9 +35,11 @@ import { Economy } from './economy.js';
 import { Growth } from './growth.js';
 import { PowerGrid } from './power.js';
 import { RoadAccess } from './road-access.js';
+import { Pathfinder } from './path.js';
 import { RoadGraph } from './roadGraph.js';
 import { Rng } from './rng.js';
 import { CHUNK } from '../shared/types.js';
+import { Traffic } from './traffic.js';
 import { Upkeep } from './upkeep.js';
 import { WaterGrid } from './water.js';
 import { World, type TerrainPreset } from './world.js';
@@ -61,6 +63,8 @@ export class Sim {
   readonly water: WaterGrid; // T-406: pressure nets over tower-fed conductors (derived truth)
   readonly cohort: Cohort; // T-305: residents/jobs/gravity match/unemployment/happiness
   readonly roadGraph: RoadGraph; // T-401: node/edge road graph (derived; traffic A* + power seam)
+  readonly pathfinder: Pathfinder; // T-402: budgeted A* + O-D cache (derived; never persisted §9)
+  readonly traffic: Traffic; // T-403: daily volume assignment w/ BPR feedback + commute stats (derived)
   readonly upkeep: Upkeep; // T-205: monthly per-building/road upkeep (economy stage)
   readonly demand: Demand; // T-206: FR-S02 RCI demand, recomputed daily (derived)
   readonly fields: Fields; // T-207: land value + landFit (fields stage, derived)
@@ -76,8 +80,10 @@ export class Sim {
     this.power = new PowerGrid(this.world, this.buildings);
     this.water = new WaterGrid(this.world, this.buildings, this.power); // derived; empty towers = inactive = self-watered // derived; empty grid ⇒ inactive ⇒ self-powered
     this.roadGraph = new RoadGraph(this.world); // derived; built eagerly from the (empty) road layer
+    this.pathfinder = new Pathfinder(this.roadGraph); // derived; O-D cache keyed by graphVersion
     this.roadGraph.rebuildAll();
     this.cohort = new Cohort(this.world, this.buildings);
+    this.traffic = new Traffic(this.roadGraph, this.pathfinder, this.cohort); // derived daily pass (T-403)
     this.demand = new Demand(this.world, this.buildings, { cohort: this.cohort, getTax: () => this.economy.tax });
     this.fields = new Fields(this.world, this.buildings);
     this.fields.recompute(); // fields valid from t=0 (growth scores read them day 1)
@@ -98,8 +104,11 @@ export class Sim {
       this.power.recompute();
       this.water.recompute(); // T-406: pressure truth joins the same pass (shared conductors)
       this.growth.onDay(tick);
-      // Cohort (jobs/agents stage) recomputes BEFORE demand (frozen order §2); demand then reads it.
-      this.cohort.recompute(this.economy.tax.r);
+      // Cohort (jobs/agents stage) recomputes BEFORE demand (frozen order §2). Traffic sits
+      // between them (docs/02 §Daily: cohort → traffic → demand): cohort reads traffic's
+      // over-commute share from YESTERDAY (1-day lag), traffic consumes the fresh chunk snapshot.
+      this.cohort.recompute(this.economy.tax.r, this.traffic.overCommuteShare());
+      this.traffic.recompute(); // T-403: zero → assign flows → v/c → LOS; BPR feeds tomorrow
       // Demand recomputes AT THE END of the growth stage (post completion + move-in);
       // see the T-206 stub ledger in demand.ts for why (doc smoothing cut → §9 ask-first).
       this.demand.recompute();
@@ -140,7 +149,7 @@ export class Sim {
           if (t.y < y0) y0 = t.y; if (t.y > y1) y1 = t.y;
         }
         if (x1 >= x0) this.roadAccess.noteRect({ x0, y0, x1, y1 }); // attachment may change around new road
-        if (x1 >= x0) { this.roadGraph.noteRect({ x0, y0, x1, y1 }); this.roadGraph.flush(); } // T-401 structural rebuild
+        if (x1 >= x0) { this.roadGraph.noteRect({ x0, y0, x1, y1 }); this.roadGraph.flush(); this.pathfinder.flushCache(); } // T-401 structural rebuild · T-402 paths re-derive
         this.emitChunksFor(cmd.path);
       }
     } else if (cmd.kind === 'paint-zone') {
@@ -218,6 +227,7 @@ export class Sim {
         res = { ok: true, cost: v.cost, tiles: applied };
         this.roadAccess.noteRect(cmd.rect); // road loss may de-attach neighbours ±2
         this.roadGraph.noteRect(cmd.rect); this.roadGraph.flush(); // T-401: road loss rebuilds affected components
+        this.pathfinder.flushCache(); // T-402: cached paths die with their graph
         if (hadLines) this.events.push({ type: 'power-line-changed' });
         this.emitChunksForRect(cmd.rect);
       }
@@ -376,6 +386,7 @@ export class Sim {
     else this.buildings.reset(); // pre-T-202 saves carry no entity section → restore empty (repair note)
     this.roadAccess.recomputeForLoad(this.buildings); // derived flags follow the restored layers silently
     this.roadGraph.rebuildAll(); // T-401: graph is derived; rebuilt canonically from restored road layer
+    this.pathfinder.flushCache(); // T-402: no stale routes span a load
     // T-405 (v3 save-format): restore persisted plant sites, then rebuild derived power flags.
     // Absence (pre-v3 save) leaves zero plants; with no lines either the grid stays inactive and
     // the city runs self-powered (spec §9 legacy-guard — old saves keep growing).
@@ -403,7 +414,8 @@ export class Sim {
     }
     // Derived recompute (post-load): cohort → demand, both read restored buildings + restored tax so
     // the first post-load day matches an uninterrupted run (and RCI bars are correct immediately).
-    this.cohort.recompute(this.economy.tax.r);
+    this.cohort.recompute(this.economy.tax.r, this.traffic.overCommuteShare());
+    this.traffic.recompute(); // T-403: volumes re-derive from restored buildings immediately
     this.demand.recompute();
     this.events.push({ type: 'treasury-changed', balance: this.economy.balance });
   }

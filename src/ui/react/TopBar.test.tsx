@@ -42,6 +42,8 @@ describe('T-208 FR-U02 — HUD pop/jobs/unemployment follow city growth', () => 
         valueOverlay={false}
         powerOverlay={false}
         waterOverlay={false}
+        trafficOverlay={false}
+        trafficAlert={null}
       />,
     );
     // 4 Hz cadence is the 250 ms snapshot pump in main; this strip is always visible.

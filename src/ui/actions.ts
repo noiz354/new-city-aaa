@@ -28,6 +28,8 @@ export interface UiActions {
   togglePowerOverlay(): void;
   /** T-406: water-pressure overlay toggle (W key / TopBar). */
   toggleWaterOverlay(): void;
+  /** T-403: traffic LOS overlay toggle (T key / TopBar). */
+  toggleTrafficOverlay(): void;
   /** T-303: open/close the budget panel. */
   toggleBudget(): void;
   /** T-302: set a zone's tax rate (0..20 %); clamped by the sim. */

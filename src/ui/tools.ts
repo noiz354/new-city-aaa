@@ -35,7 +35,7 @@ export class ToolController {
     private readonly view: View,
     private readonly store: UiStore,
     private readonly host: CommandHost,
-    private readonly actions: Pick<UiActions, 'setTool' | 'togglePause' | 'toggleCamera' | 'toggleValueOverlay' | 'togglePowerOverlay' | 'toggleWaterOverlay' | 'toggleBudget'>,
+    private readonly actions: Pick<UiActions, 'setTool' | 'togglePause' | 'toggleCamera' | 'toggleValueOverlay' | 'togglePowerOverlay' | 'toggleWaterOverlay' | 'toggleTrafficOverlay' | 'toggleBudget'>,
   ) {
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     window.addEventListener('pointermove', (e) => this.onMove(e));
@@ -131,6 +131,8 @@ export class ToolController {
       this.actions.togglePowerOverlay(); // T-405: power-grid overlay
     } else if (e.code === 'KeyW') {
       this.actions.toggleWaterOverlay(); // T-406: water-pressure overlay
+    } else if (e.code === 'KeyT') {
+      this.actions.toggleTrafficOverlay(); // T-403: traffic LOS overlay
     } else if (e.code === 'KeyB') {
       this.actions.toggleBudget(); // T-303: budget panel
     } else if (e.code === 'Escape') {

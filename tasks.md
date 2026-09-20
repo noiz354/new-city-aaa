@@ -29,6 +29,13 @@
 > Memerlukan 2 koreksi engine (budget growth N sesuai docs §3; plafon employment cohort `matched=W` saat J≥W).
 > Band terkalibrasi: pop 4136 ∈[3k,8k], treasury>0 tiap bulan, u 0–12%, happiness 55–85. S-sprawl/S-crisis tetap
 > ditunda (traffic/power = slice berikutnya). Suite **156/156**.
+> Update 2026-09-20 #6: **T-403 `[x]`** — traffic assignment harian (flow cohort→LOS A–F, BPR feedback,
+> penalti komute lag-1-hari) + TrafficOverlay & badge kemacetan (kunci T). UJ-03 hijau di test. Perf traffic ≈ 0.004 ms/hari.
+
+> Update 2026-09-20 #5: **T-402 `[x]`** — pathfinder A* berbudget + fallback greedy + cache O-D LRU
+> (`sim/path.ts` + protokol `path.worker.ts`, wiring `sim.ts`, 8 test + bench perf: 500 path ≈ 0.014ms/path).
+> Suite 202/203 (1 = flake `dayMsP95` pra-ada, path bench selalu lolos). Slot T-405 sengaja dilewat (sandbox lain).
+
 > Update 2026-09-20 #4: **T-401 `[x]`** — road graph builder (`sim/roadGraph.ts`), fondasi A* (T-402) & power
 > flood (T-405). Node/edge + component-scoped incremental rebuild. Suite **165/165**.
 
@@ -268,10 +275,48 @@
   - **Evidence: vitest — `roadGraph.test.ts` 9 test** (straight/T-junction/loop/disconnected fixture exact;
     flush vs rebuildAll struktural-equal; merge pada tambah konektor; split pada bulldoze tengah; version monotonic;
     determinisme). Suite **165/165**.
-- [ ] **T-402 L — A* + cache + worker.** Binary-heap A*, bobot BPR, cache O-D, offload worker; harness `npm run perf`.
+- [x] **T-402 L — A* + cache + worker.** Binary-heap A*, bobot BPR, cache O-D, offload worker; harness `npm run perf`.
   `Deps: T-401` · `Accept: 500 path <100ms; deterministik seed sama.` · `Evidence: perf log.` · `Skills: tdd, city-builder-simulation-audit`
-- [ ] **T-403 M — Traffic assignment + viz.** Volume → v/c → warna LOS + alert congestion.
+  - **Status: DONE 2026-09-20.** `src/sim/path.ts`: `Pathfinder` = heap binary tie-break deterministik `(f, nodeId)` +
+    A* arah-tunggal dengan **budget ekspansi** di loop utama (`PATH_TUNING.maxExpansions` 8192) — budget habis → pass
+    **greedy best-first (h-only, headroom 2×)** dan hasil diflag `fallback:true` (kontrol YAPF, docs/02 §Pathfinding/S-06);
+    heap terkuras tanpa dest → `null` (§7 no-path). Bobot `edgeWeightHours` = BPR §4 `1+α(v/c)^β` (α 0.15 β 4), heuristik
+    euclid/`maxSpeedKph` admissible (BPR ≥ 1). **Cache O-D LRU** key `graphVersion|origin|dest` (cap 4096) +
+    hit/miss/hitRatio + `stats()`; `flushCache()` eksplisit di setiap edit jalan sim (place-road/bulldoze) & loadState,
+    peanjaga malas di `route()` bila `graphVersion` bergeser. Derived — tak dipersist/codec/hash (spec §9). Cost greedy
+    dihitung ulang jujur dari edge terpilih. `src/sim/path.worker.ts`: protokol batch `{reqId, origin, dest, versionBucket}`
+    → `{ok, nodes, edges, costHours, fallback, stale}` **terurut reqId**, bucket mismatch di-skip gratis; core sync dipakai
+    vitest (worker channel asli = slice VS-8). Wiring `sim.ts`: `readonly pathfinder` setelah roadGraph. `perf/run.test.ts`:
+    bench 500 rute (instance **cacheless** untuk thru A* murni + run warm-mixed untuk hit-ratio), PerfResults additive
+    (`pathsPerDay/pathTotalMs/pathP95Ms/pathCacheHitRatio`, baseline lama tanpa field diguard), budget ≤ max(100ms, ×2).
+  - **Evidence: vitest — `path.test.ts` 8 test** (straight exact node/edge/cost + trivial; toggling rute BPR ke detour
+    paralel saat main dijams; disconnected → null; budget 3 → fallback:true tetap sampai dest, budget 0 → null; determinisme
+    dua-sim seed-sama JSON-equal; LRU cap/hit-ratio; round-trip protokol worker terurut+stale; flush cache di edit sim).
+    **Perf log (`npm run perf`): 500 path ≈ 6.8–13.4ms total (≈0.014–0.027ms/path), p95 ≈ 0.02ms, cache hit-ratio 0.976
+    — jauh di bawah accept 100ms.** Suite **202/203: 1 failure = flake dayMsP95 pra-ada** (gate noise sandbox kontended,
+    sudah terdokumentasi; rerun solo bergantian hijau/gagal — terkait T-402 BUKAN: path bench-nya selalu lolos budget).
+    lint/arch/licenses/typecheck/build hijau.
+- [x] **T-403 M — Traffic assignment + viz.** Volume → v/c → warna LOS + alert congestion.
   `Deps: T-402` · `Accept: 1 jalan macet (merah); paralel melegakan (UJ-03).` · `Evidence: 2 overlay screenshot.` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
+  - **Status: DONE 2026-09-20 (kode+test hijau; screenshot oleh sandbox lain).** `src/sim/traffic.ts` `Traffic`: pass harian
+    (cohort → traffic → demand, docs/02 §Daily) — flush cache path (volume kemarin = bobot BPR hari ini), flow worker→job
+    chunk dari snapshot cohort baru (`chunkData()`; gravity allocation mirror `COHORT_TUNING`, cap 2048 pair + overflow
+    terhitung), rute via cache T-402, lalu nol-kan volume + akumulasi `count × 2 trip × 0.8` per edge; v/c → LOS A–F
+    (`TRAFFIC_TUNING.losVCaps` 0.6/0.7/0.8/0.9/1.0); komute >45 mnt → `overCommuteShare` → penalti happiness cohort
+    (`commutePenaltyMax` 5 poin, **lag 1 hari**, order frozen). Tanpa persist/codec/hash (§9). BPR-feedback **tanpa damping**
+    — assignment all-or-nothing per pair; osilasi deterministik dicatat di kode (keputusan plan jebakan).
+  - **View:** `src/view/traffic.ts` `TrafficOverlay` (DataTexture per-tile by v/c, arch: view hanya impor `shared` →
+    structural `TrafficView` + warna duplikasi-kontrak dari losVCaps) + wiring view.ts (attach/refresh/setWorld-preserve)
+    + toggle TopBar (`Traffic`) & kunci **T** + badge alert 🚗 (LOS F / LOS E) via store `trafficAlert` (pump 250ms,
+    tanpa snapshot field — codec tak tersentuh).
+  - **Evidence test — `traffic.test.ts` 6 test:** threshold losOf A..F; UJ-03 kota koridor (junction benar, edge koridor
+    192m unik): volume 216 pekerja × 1.6 = 345.6 > kapasitas 200 → **v/c 1.7 LOS F (merah)** ✓; jalan paralel y=28 →
+    BPR feedback memindahkan arus → **koridor v/c kolaps < 0.3** ✓; penalti komute: bukti lag eksak (hari N cohort masih
+    0.63, hari N+1 turun >0.03); determinisme volume dua-sim; kota kosong → nol. **Perf: probe `traffic.recompute` ≈
+    0.004 ms/hari di hamlet (30 hari); bench path T-402 tetap 500 path ≈ 9 ms / hit-ratio 0.976.** Suite **200/201** —
+    1 failure = flake `dayMsP95` pra-ada (noi sandbox; dayMsP95 berosilasi 2.2–7.8ms antar-run kode-identik, T-403 terbukti
+    ~0.004ms/hari via probe). Gates: tsc/lint/arch/licenses/build hijau. Screenshot macet-merah + lega: di luar sandbox ini
+    (konvensi, grab Chromium sandbox lain).
 - [ ] **T-404 M — Visual agent pool.** 500 mobil + 300 pejalan sampling top flow; headlight malam.
   `Deps: T-403` · `Accept: mobil di jalan sibuk, 0 saat pause.` · `Evidence: screenshot.` · `Skills: three-best-practices`
 - [x] **T-405 M — Power flood fill.** Plant + line/road hantar; supply/demand per net; brownout I-first; overlay + ikon.

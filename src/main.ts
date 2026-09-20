@@ -119,6 +119,13 @@ async function boot(): Promise<void> {
       view.attachWater(sim.water, next);
       store.set({ waterOverlay: next });
     },
+    // T-403: traffic LOS overlay — same toggle contract; sim truth binds through
+    // view.attachTraffic; refresh cadence rides the 250ms snapshot pump below.
+    toggleTrafficOverlay: () => {
+      const next = !store.getState().trafficOverlay;
+      view.attachTraffic(sim.roadGraph, next);
+      store.set({ trafficOverlay: next });
+    },
     toggleBudget: () => store.set({ budgetOpen: !store.getState().budgetOpen }), // T-303
     // T-302: tax-rate writer (the seam economy.setTax existed for). Pushes a fresh snapshot so the
     // sliders re-render at the clamped value; persistence rides the next save via section 5.
@@ -167,6 +174,15 @@ async function boot(): Promise<void> {
         store.set({ snapshot: sim.snapshot() });
         view.refreshLandValue(); // T-207 overlay pump (no-op when hidden)
         view.refreshPower(); // T-405 overlay pump (no-op when hidden)
+        view.refreshTraffic(); // T-403 overlay pump (no-op when hidden)
+        // T-403 congestion badge: F corridors scream, E corridors warn (docs/02 §Traffic alert).
+        {
+          const t = sim.traffic.stats();
+          const f = t.losCounts[5];
+          const eCount = t.losCounts[4];
+          const alert = f > 0 ? `🚗 Macet: ${f} koridor LOS F` : eCount > 0 ? `🚗 ${eCount} koridor nyaris macet (LOS E)` : null;
+          if (store.getState().trafficAlert !== alert) store.set({ trafficAlert: alert });
+        }
       }
       const d = sim.clock.date();
       if (d.month === 1 && d.day === 1 && d.year !== lastAutoYear) {

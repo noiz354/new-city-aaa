@@ -37,6 +37,27 @@ const NEUTRAL: CohortState = {
   workforceAvail: 0,
 };
 
+/** Derived chunk aggregates kept from the latest recompute — the T-403 O-D flow source. */
+export interface CohortChunkData {
+  /** chunk key → occupied-resident count (R buildings). */
+  workers: ReadonlyMap<number, number>;
+  /** chunk key → job openings (occupied C/I buildings). */
+  jobs: ReadonlyMap<number, number>;
+  residents: number;
+  jobOpenings: number;
+  matched: number; // employed workers (== the total the flows must sum to)
+  stride: number; // chunk-grid row stride (world.size / CHUNK)
+}
+
+const EMPTY_CHUNKS: CohortChunkData = {
+  workers: new Map(),
+  jobs: new Map(),
+  residents: 0,
+  jobOpenings: 0,
+  matched: 0,
+  stride: 1,
+};
+
 function chunkDistMeters(ax: number, ay: number, bx: number, by: number): number {
   const dx = (ax - bx) * CHUNK * TILE_M;
   const dy = (ay - by) * CHUNK * TILE_M;
@@ -47,6 +68,7 @@ export class Cohort {
   private readonly world: World;
   private readonly buildings: Buildings;
   private current: CohortState = { ...NEUTRAL };
+  private chunks: CohortChunkData = EMPTY_CHUNKS;
 
   constructor(world: World, buildings: Buildings) {
     this.world = world;
@@ -55,6 +77,11 @@ export class Cohort {
 
   state(): CohortState {
     return this.current;
+  }
+
+  /** Chunk aggregates from the latest daily recompute (derived snapshot, T-403 seam). */
+  chunkData(): CohortChunkData {
+    return this.chunks;
   }
 
   /** Inputs for Demand.recompute (unemployment/happy/jobsAvailable/workforceAvail). */
@@ -72,7 +99,7 @@ export class Cohort {
    * `taxRate` is the current per-zone rate (%) used for the lowTax happiness term.
    * An empty city (no residents) returns NEUTRAL so bootstrap demand stays R+7/C+2/I+16.5.
    */
-  recompute(taxRate: number): void {
+  recompute(taxRate: number, overCommuteShare = 0): void {
     const T = COHORT_TUNING;
     const stride = this.world.size / CHUNK;
     const wChunks = new Map<number, number>(); // chunk key → residents
@@ -96,6 +123,7 @@ export class Cohort {
 
     if (residents === 0) {
       this.current = { ...NEUTRAL };
+      this.chunks = { ...EMPTY_CHUNKS, stride };
       return;
     }
 
@@ -139,9 +167,12 @@ export class Cohort {
     const unemployment = J > 0 ? Math.max(0, (W - matched) / W) : 0;
     const employed = W > 0 ? matched / W : 0;
     const lowTax = taxRate <= T.lowTaxThreshold ? T.happyLowTax : 0;
+    // T-403: over-commuting (>45 min, measured by Traffic YESTERDAY — the cohort → traffic
+    // daily order is frozen in §2) costs up to commutePenaltyMax happiness points.
+    const commute = -T.commutePenaltyMax * Math.min(1, Math.max(0, overCommuteShare));
     const happy100 = Math.max(
       0,
-      Math.min(100, T.happyBase + employed * T.happyEmployed + lowTax),
+      Math.min(100, T.happyBase + employed * T.happyEmployed + lowTax + commute),
     );
 
     this.current = {
@@ -154,5 +185,6 @@ export class Cohort {
       jobsAvailable: Math.min(1, J / Math.max(1, W)),
       workforceAvail: Math.min(1, W / T.workforceDivisor),
     };
+    this.chunks = { workers: wChunks, jobs: jChunks, residents: W, jobOpenings: J, matched, stride };
   }
 }

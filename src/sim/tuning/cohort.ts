@@ -19,4 +19,9 @@ export const COHORT_TUNING = {
   lowTaxThreshold: 10,
   /** I-demand workforceAvail = min(1, workforce / this). */
   workforceDivisor: 500,
+  /** T-403: max happiness points (0–100 scale) lost when EVERY commute exceeds 45 min
+   *  (scaled by over-commute share; measured by Traffic with a 1-day lag — frozen daily
+   *  order cohort → traffic → demand, docs/02 §Daily). Zero realised in the S-fixtures
+   *  (max commute ≈ 30 min), so the locked suite stays untouched. */
+  commutePenaltyMax: 5,
 } as const;

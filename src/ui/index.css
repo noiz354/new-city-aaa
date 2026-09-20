@@ -66,6 +66,11 @@
 .dim {
   color: #8b949e;
 }
+/* T-403: congestion badge — warm red that reads against the panel */
+.stat.alert {
+  color: #ff7b72;
+  font-weight: 600;
+}
 .spacer {
   width: 8px;
 }
