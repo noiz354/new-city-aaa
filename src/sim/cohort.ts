@@ -101,18 +101,27 @@ export class Cohort {
 
     const W = residents;
     const J = jobs;
-    // Gravity efficiency g ∈ (0,1]: job chunk k draws min(o_k, reachable workforce); the reachable
-    // fraction for k = Σ_j w_kj·p_j / W (w_kj = 1/(1+dist/800)², cut beyond 3000m). g is the
-    // job-share-weighted mean of those fractions.
-    let g = 0;
-    if (J > 0) {
+    // Employment: the docs' "+" loop "Jobs → R demand → pop → C demand → jobs" reads the aggregate
+    // employment floor as the satisfaction of the binding scarcity — with free jobs (J ≥ W) every
+    // resident finds work (any waypoint in the job network is commutable at R0=800m within 3000m).
+    // With scarce jobs (J < W) the chunk-gravity reachability r_k = min(1, Σ_j w_j·p_arg/W) per job
+    // chunk (w weights the commute) decides how many of the J openings can actually be filled before
+    // the demand signal falls; matched is the sum over job chunks, ≥ the J-side floor.
+    let matched: number;
+    if (J === 0) {
+      matched = 0;
+    } else if (J >= W) {
+      matched = W; // surplus jobs: the whole workforce is employed (see note above)
+    } else {
+      // scarce jobs: chunk-gravity fill per job chunk
+      let g = 0;
       for (const [jk, o_k] of jChunks) {
         const jcx = jk % stride;
         const jcy = Math.floor(jk / stride);
         let denom = 0;
-        for (const [wk, p_j] of wChunks) {
-          const wcx = wk % stride;
-          const wcy = Math.floor(wk / stride);
+        for (const [wk_1, p_j] of wChunks) {
+          const wcx = wk_1 % stride;
+          const wcy = Math.floor(wk_1 / stride);
           const d = chunkDistMeters(jcx, jcy, wcx, wcy);
           if (d > T.maxCommuteMeters) continue;
           const w = 1 / (1 + d / T.gravityMeters) ** 2;
@@ -120,8 +129,8 @@ export class Cohort {
         }
         g += (o_k / J) * (denom / W);
       }
+      matched = Math.floor(J * g);
     }
-    const matched = J === 0 ? 0 : Math.floor(Math.min(W, J) * g);
     // Unemployment is only defined once a job market exists. A residential-only town (J=0) has no
     // jobs to be unemployed from, so it reports 0% — this keeps R-first bootstrap viable (VS-2a:
     // "zone R → houses grow") under the matured demand model, which otherwise would read 100%

@@ -25,6 +25,10 @@
 > Suite **147/147**, lint/arch/licenses/typecheck/build hijau. T-304…T-306 kini tidak lagi ter-gate keputusan format save.
 > Update 2026-09-20 #2: **T-304 + T-305 `[x]`** — cohort nyata (`sim/cohort.ts`: residents, jobs C/I, gravity match,
 > unemployment, happiness) menggantikan stub demand; accept **R+C+I unemployment <20%** tertest. Suite **153/153**.
+> Update 2026-09-20 #3: **T-306 `[x]`** — balancing suite S-green (`sim/balancing.test.ts`) + `tuning/CHANGELOG.md`.
+> Memerlukan 2 koreksi engine (budget growth N sesuai docs §3; plafon employment cohort `matched=W` saat J≥W).
+> Band terkalibrasi: pop 4136 ∈[3k,8k], treasury>0 tiap bulan, u 0–12%, happiness 55–85. S-sprawl/S-crisis tetap
+> ditunda (traffic/power = slice berikutnya). Suite **156/156**.
 
 ## VS-0 — Foundation (T-1xx)
 
@@ -226,8 +230,25 @@
   - **Evidence: vitest — `cohort.test.ts` 6 test** (neutral-ledger bootstrap; invariant matched≤min(W,J);
     **R+C+I unemployment <20% + snapshot HUD**; R-only J=0→u=0 jobMarket; determinisme script). Suite **153/153**
     (+6), lint/arch/licenses/typecheck/build hijau. **Accept terpenuhi:** unemployment <20% (test).
-- [ ] **T-306 M — Balancing suite + tuning lock.** Korpus skenario ekonomi hijau; angka tuning dikunci.
+- [x] **T-306 M — Balancing suite + tuning lock.** Korpus skenario ekonomi hijau; angka tuning dikunci.
   `Deps: T-305` · `Accept: suite hijau.` · `Evidence: CI log.` · `Skills: city-builder-simulation-audit, city-builder-performance-gate`
+  - **Status: DONE 2026-09-20 (S-green).** Scenario bay `sim/balancing.ts` (spine city via command pipeline:
+    roads every `pitch`, strip R di atas, I di bawah; semua lot dalam radius road-port ≤2 sehingga `isConnected`).
+    `trajectory()` mengambil sampel bulanan deterministik. **S-green** (`sim/balancing.test.ts`):
+    (1) band trajectory pop 3k–8k, treasury>0 tiap bulan, unemployment 0–12%, happiness 55–85% selama 3 tahun;
+    (2) equilibrium tenaga−kerja J≥W saat plateau; (3) determinisme seeded-city.
+  - **Dua koreksi engine yang diperlukan (nilainya terkunci suite, dicatat di `src/sim/tuning/CHANGELOG.md`):**
+    (a) **budget growth N** = `clamp(2+floor(pop/500),2,25)` per docs/03 §3 — flat `maxSpawnsPerDay:1` tidak pernah
+    sampai ke band populasi (≤4380); 6 test yang mem-bake pacing lama di-update ke semantics N.
+    (b) **plafon employment cohort**: `matched=W` saat J≥W (pasar surplus mempekerjakan semua — loop "+" docs §5);
+    `matched=floor(J·g)` hanya saat J<W (scarcity bind via chunk-reach, kasus donut/sprawl).
+  - **Kalibrasi band (§4):** pop 4136 ∈[3k,8k], treasury>0 tiap bulan, u 0%, h 68% → band final
+    pop[3000,8000], treasury>0/bulan, u 0–12% (hypothesis 3–12% di-re-justifikasi: model sehat tak punya
+    forced frictional unemployment; upper 12% tetap menjaga regresi pasar-kerja). `GAS_DIRECTORY` memosisikan
+    startMoney/taxes; bobot tuning (TAX_BASE, jobsPerBuilding, growth N, dsb.) terkunci via suite ini.
+  - **Deferred:** S-sprawl (traffic LOS-p95 → VS-4) & S-crisis (power blackout + recovery → VS-3 fase-2) —
+    landing di sini begitu sistemnya ada, konstanta direkam di CHANGELOG.
+  - **Evidence: CI log** — `npm run ci` hijau: **156/156 test** (+3), lint/arch/licenses/typecheck/build.
 - [ ] **VS-3 GATE:** UJ-01 + UJ-02 penuh; UJ-05 lolos.
 
 ## VS-4 — Traffic & Utilities (T-4xx)

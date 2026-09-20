@@ -15,7 +15,7 @@ import { BUILDING_OCCUPIED, BUILDING_CONSTRUCTION, type Buildings } from './buil
 import type { Demand } from './demand.js';
 import type { Fields } from './fields.js';
 import type { RoadAccess } from './road-access.js';
-import { BUILDING_CAPACITY, GROWTH_TUNING } from './tuning/growth.js';
+import { BUILDING_CAPACITY, dailySpawnBudget, GROWTH_TUNING } from './tuning/growth.js';
 import type { World } from './world.js';
 
 export interface GrowthResult {
@@ -58,8 +58,9 @@ export class Growth {
         if (cap > 0 && this.buildings.setOccupants(b.id, cap)) movedIn++;
       }
     });
-    // 3) Spawn: score every eligible lot, take the top-N (N = pacing cap).
+    // 3) Spawn: score every eligible lot, take the top-N (N = daily budget N from population, docs §3).
     let spawned = 0;
+    const budgetN = dailySpawnBudget(this.buildings.population());
     const w = this.world;
     const candidates: { idx: number; score: number }[] = [];
     for (let y = 0; y < w.size; y++) {
@@ -76,7 +77,7 @@ export class Growth {
     }
     candidates.sort((a, b) => b.score - a.score || a.idx - b.idx);
     for (const c of candidates) {
-      if (spawned >= GROWTH_TUNING.maxSpawnsPerDay) break;
+      if (spawned >= budgetN) break;
       if (this.buildings.startConstruction(c.idx % w.size, Math.floor(c.idx / w.size), tick) !== null) spawned++;
     }
     return { spawned, movedIn };
