@@ -23,6 +23,8 @@
 > SAVE_VERSION 1→2, section 5 (policy: tax r/c/i); save v1 (tanpa policy) di-migrasi ke default 9/9/9 + repair note.
 > `codec.test.ts` +3 test (version/policy, persist custom tax, migrasi v1→v2), `economy.test.ts` +1 (15%→income↑).
 > Suite **147/147**, lint/arch/licenses/typecheck/build hijau. T-304…T-306 kini tidak lagi ter-gate keputusan format save.
+> Update 2026-09-20 #2: **T-304 + T-305 `[x]`** — cohort nyata (`sim/cohort.ts`: residents, jobs C/I, gravity match,
+> unemployment, happiness) menggantikan stub demand; accept **R+C+I unemployment <20%** tertest. Suite **153/153**.
 
 ## VS-0 — Foundation (T-1xx)
 
@@ -199,10 +201,31 @@
     income − gross upkeep, padahal treasury bergerak income − (gross − subsidi Frontier) → baris "Frontier subsidy"
     ditambah, `snapshot.lastMonth/history` kini membawa `subsidy`, render-test + economy test invariant Δbalance.
     Escape kini menutup panel (sebelumnya hanya B/✕). Slider funding tetap placeholder service-era (VS-5/VS-6).
-- [ ] **T-304 M — RCI demand matang.** Bobot unemployment/happiness/land/tax final + unit test.
+- [x] **T-304 M — RCI demand matang.** Bobot unemployment/happiness/land/tax final + unit test.
   `Deps: T-302` · `Accept: R+C+I → unemployment <20%.` · `Evidence: HUD screenshot.` · `Skills: city-builder-simulation-audit`
-- [ ] **T-305 M — Citizens + jobs (cohort).** Resident/job count, gravity match, unemployment + happiness.
+  - **Status: DONE 2026-09-20 (tersambung T-305).** Bobot tetap canonical docs/03 §2 (`tuning/demand.ts`,
+    tidak diubah — penguncian final milik T-306). Yang "matang" adalah inputnya: demand kini menerima
+    ledger cohort nyata (unemployment/happiness/jobsAvailable/workforceAvail) via injeksi `Demand({cohort, getTax})`,
+    bukan stub konstan; absence → stub netral (determinisme & pemakaian standalone tetap). Tax kini per-zone
+    dari `economy.tax` (persist v2). **Accept terpenuhi:** kota R+C+I berimbang → unemployment <20% (cohort.test).
+    **Evidence: vitest** (screenshot HUD perlu browser sandbox — lihat catatan T-302/VS-3).
+- [x] **T-305 M — Citizens + jobs (cohort).** Resident/job count, gravity match, unemployment + happiness.
   `Deps: T-304` · `Accept: kota R+C+I unemployment <20%.` · `Evidence: HUD screenshot.` · `Skills: city-builder-simulation-audit`
+  - **Status: DONE 2026-09-20.** Modul baru `sim/cohort.ts` (v1 net-flow per §1 scope-cut; migrasi/aging ditunda).
+    Residents = occ buildings.occupants (max-occup di-place growth). Jobs = pembukaan C/I occ (`jobsPerBuilding`
+    C2/I3 × level — tunable `tuning/cohort.ts`, "first guess — S-green decides"). Gravity match per-chunk
+    (`openings/(1+dist/800)²`, `gravityMeters=800`, cut `maxCommuteMeters=3000`, iterasi Map deterministis).
+    Happiness v1 = base 50 + employed·10 + lowTax·8 (residence setara → mean; subset docs/03 §4, sejalan
+    stub 80 yang sudah dipakai ekonomi T-301). Snapshot `jobs`/`unemployment` kini nyata (dulu 0 konstan T-208).
+  - **Keputusan model:** unemployment **0 saat J=0** (belum ada pasar kerja) — kota R-only tetap layak tumbuh
+    (kontrak VS-2a "zone R → rumah tumbuh"); begitu C/I ada, unemployment nyata naik bila tenaga kerja > pembukaan.
+    Tanpa ini, R-only → 100% unemployment → demandR negatif → growth mati total.
+  - **Integration:** `Sim.onTick` day-boundary `growth.onDay → cohort.recompute(tax.r) → demand.recompute →
+    fields.recompute` (order §2); `loadState()` recompute derived `cohort→demand` setelah restore world/buildings/tax.
+    Determinisme: derived, tidak dipersist; save→load→continue hash-equal tetap (codec/upkeep/demand parity tests).
+  - **Evidence: vitest — `cohort.test.ts` 6 test** (neutral-ledger bootstrap; invariant matched≤min(W,J);
+    **R+C+I unemployment <20% + snapshot HUD**; R-only J=0→u=0 jobMarket; determinisme script). Suite **153/153**
+    (+6), lint/arch/licenses/typecheck/build hijau. **Accept terpenuhi:** unemployment <20% (test).
 - [ ] **T-306 M — Balancing suite + tuning lock.** Korpus skenario ekonomi hijau; angka tuning dikunci.
   `Deps: T-305` · `Accept: suite hijau.` · `Evidence: CI log.` · `Skills: city-builder-simulation-audit, city-builder-performance-gate`
 - [ ] **VS-3 GATE:** UJ-01 + UJ-02 penuh; UJ-05 lolos.

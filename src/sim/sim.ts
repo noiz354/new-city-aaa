@@ -13,6 +13,7 @@ import type {
 import { fnv1aBytes } from '../shared/crc32.js';
 import { Buildings } from './buildings.js';
 import { Clock, TICKS_PER_DAY, TICKS_PER_MONTH } from './clock.js';
+import { Cohort } from './cohort.js';
 import { Demand } from './demand.js';
 import { Fields } from './fields.js';
 import { normalizeRect } from '../shared/grid.js';
@@ -40,6 +41,7 @@ export class Sim {
   readonly buildings: Buildings; // T-201: authoritative building lifecycle store
   readonly growth: Growth; // T-202: daily scoring → spawn + move-in
   readonly roadAccess: RoadAccess; // T-204: canonical attachment flags (derived truth)
+  readonly cohort: Cohort; // T-305: residents/jobs/gravity match/unemployment/happiness
   readonly upkeep: Upkeep; // T-205: monthly per-building/road upkeep (economy stage)
   readonly demand: Demand; // T-206: FR-S02 RCI demand, recomputed daily (derived)
   readonly fields: Fields; // T-207: land value + landFit (fields stage, derived)
@@ -52,7 +54,8 @@ export class Sim {
     this.rng = new Rng(this.world.seed ^ 0x51ed2709);
     this.buildings = new Buildings(this.world);
     this.roadAccess = new RoadAccess(this.world);
-    this.demand = new Demand(this.world, this.buildings);
+    this.cohort = new Cohort(this.world, this.buildings);
+    this.demand = new Demand(this.world, this.buildings, { cohort: this.cohort, getTax: () => this.economy.tax });
     this.fields = new Fields(this.world, this.buildings);
     this.fields.recompute(); // fields valid from t=0 (growth scores read them day 1)
     this.growth = new Growth(this.world, this.buildings, this.roadAccess, this.demand, this.fields);
@@ -69,6 +72,8 @@ export class Sim {
     this.buildings.onTick(tick);
     if (tick % TICKS_PER_DAY === 0) {
       this.growth.onDay(tick);
+      // Cohort (jobs/agents stage) recomputes BEFORE demand (frozen order §2); demand then reads it.
+      this.cohort.recompute(this.economy.tax.r);
       // Demand recomputes AT THE END of the growth stage (post completion + move-in);
       // see the T-206 stub ledger in demand.ts for why (doc smoothing cut → §9 ask-first).
       this.demand.recompute();
@@ -192,9 +197,9 @@ export class Sim {
         i: Math.round(this.demand.target().i),
       },
       tax: { r: this.economy.tax.r, c: this.economy.tax.c, i: this.economy.tax.i },
-      // T-208: jobs/unemployment 0 per demand.ts's T-305 cohort ledger (visible-but-honest zeros).
-      jobs: 0,
-      unemployment: 0,
+      // T-208: jobs/unemployment now real via the T-305 cohort ledger (C/I job openings / gravity match).
+      jobs: this.cohort.state().jobs,
+      unemployment: this.cohort.state().unemployment,
       bankrupt: this.economy.isBankrupt(),
       lastMonth: this.economy.lastMonth(),
       history: this.economy.history(),
@@ -243,10 +248,6 @@ export class Sim {
     this.roadAccess.recomputeForLoad(this.buildings); // derived flags follow the restored layers silently
     this.fields.invalidateStatic(); // restored terrain bytes → rebuild static base
     this.fields.recompute(); // land value is derived; rebuilt from restored world+buildings
-    // Demand is derived too, but growth reads it BEFORE the daily recompute (frozen order), so a
-    // stale bootstrap vector here would make the first post-load day diverge from an uninterrupted
-    // run (and show wrong RCI bars until then). Rebuild it from the restored city now.
-    this.demand.recompute();
     const speed = meta.speed === 0 || meta.speed === 1 || meta.speed === 2 || meta.speed === 3 ? meta.speed : 1;
     this.clock.setState({ tick: meta.tick, accumulator: meta.accumulator, speed });
     this.economy.balance = meta.balance;
@@ -258,6 +259,10 @@ export class Sim {
       this.economy.setTax('c', policy.tax.c);
       this.economy.setTax('i', policy.tax.i);
     }
+    // Derived recompute (post-load): cohort → demand, both read restored buildings + restored tax so
+    // the first post-load day matches an uninterrupted run (and RCI bars are correct immediately).
+    this.cohort.recompute(this.economy.tax.r);
+    this.demand.recompute();
     this.events.push({ type: 'treasury-changed', balance: this.economy.balance });
   }
 

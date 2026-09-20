@@ -16,6 +16,7 @@
 // the final semantics — documented in tasks.md T-206.
 import { BUILDING_OCCUPIED, type Buildings } from './buildings.js';
 import { DEMAND_TUNING } from './tuning/demand.js';
+import type { Cohort, CohortDemandInputs } from './cohort.js';
 import type { World } from './world.js';
 
 export interface DemandInputs {
@@ -53,20 +54,35 @@ export function computeDemandTargets(inp: DemandInputs): DemandVector {
   };
 }
 
+export interface DemandTax {
+  r: number;
+  c: number;
+  i: number;
+}
+
 export interface DemandOptions {
   taxRate?: number; // 0..20 percent, default DEMAND_TUNING.defaultTaxRate (sliders: T-301)
+  /** Injected by Sim (T-305): real cohort ledger (unemployment/happy/jobs). Absent → v0 stubs. */
+  cohort?: Cohort;
+  /** Injected by Sim: reads economy.tax so the persisted rate reaches demand. Absent → taxRate. */
+  getTax?: () => DemandTax;
 }
 
 export class Demand {
   private readonly world: World;
   private readonly buildings: Buildings;
-  private readonly taxRate: number;
+  private readonly cohort: Cohort | null;
+  private readonly getTax: (() => DemandTax) | null;
+  private readonly tax: DemandTax;
   private current: DemandVector = { r: 0, c: 0, i: 0 };
 
   constructor(world: World, buildings: Buildings, opts: DemandOptions = {}) {
     this.world = world;
     this.buildings = buildings;
-    this.taxRate = opts.taxRate ?? DEMAND_TUNING.defaultTaxRate;
+    this.cohort = opts.cohort ?? null;
+    this.getTax = opts.getTax ?? null;
+    const rate = opts.taxRate ?? DEMAND_TUNING.defaultTaxRate;
+    this.tax = { r: rate, c: rate, i: rate };
     this.recompute(); // visible targets from t=0 (snapshot/HUD never read a warmup hole)
   }
 
@@ -85,10 +101,18 @@ export class Demand {
 
   /**
    * Daily recompute (called by Sim at the day boundary, growth stage, before growth decisions).
-   * Inputs derive from live sim state; stubbed kernels are v0 constants (see header ledger).
+   * When a Cohort is injected (Sim, T-305) it supplies real unemployment/happiness/jobs; otherwise
+   * the v0 stub ledger (T.happyStub neutral, zero unemployment/jobs) keeps standalone/deterministic
+   * callers behaving as before. Tax comes from the injected provider (persisted rate) or the ctor rate.
    */
   recompute(): void {
     const T = DEMAND_TUNING;
+    const coh: CohortDemandInputs = this.cohort
+      ? this.cohort.demandInputs()
+      : { unemployment: 0, happy: T.happyStub, jobsAvailable: 0, workforceAvail: 0 };
+    const tax = this.getTax ? this.getTax() : this.tax;
+    const taxR = tax.r / T.taxNorm;
+    const taxI = tax.i / T.taxNorm;
     let rTotal = 0; let rEmpty = 0;
     this.buildings.forEachLive((b) => {
       if (b.zone === 1 && b.state === BUILDING_OCCUPIED) {
@@ -100,15 +124,15 @@ export class Demand {
     const pop = this.buildings.population();
     void this.world; // vacancy-by-zone-tiles interpretation would read counts here (T-207 owns land value);
     this.current = computeDemandTargets({
-      unemployment: 0, // stub: T-305
-      happy: T.happyStub, // stub: VS-3/T-305
-      tax: this.taxRate / T.taxNorm,
-      taxI: this.taxRate / T.taxNorm,
+      unemployment: coh.unemployment,
+      happy: coh.happy,
+      tax: taxR,
+      taxI,
       vacancyR,
-      vacancyC: 0, // stub: no resident-less dwelling concept for C (see header)
+      vacancyC: 0, // no resident-less dwelling concept for C (see header)
       vacancyI: 0,
-      jobsAvailable: 0, // stub: T-305
-      workforceAvail: 0, // stub: unemployed/500 — unemployed stub 0
+      jobsAvailable: coh.jobsAvailable,
+      workforceAvail: coh.workforceAvail,
       popFactor: Math.min(1, pop / T.popFactorDivisor),
     });
   }
