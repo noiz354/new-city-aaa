@@ -276,8 +276,8 @@
   `Deps: T-403` · `Accept: mobil di jalan sibuk, 0 saat pause.` · `Evidence: screenshot.` · `Skills: three-best-practices`
 - [x] **T-405 M — Power flood fill.** Plant + line/road hantar; supply/demand per net; brownout I-first; overlay + ikon.
   `Deps: T-401` · `Accept: overload → ikon unpowered; plant ke-2 pulihkan (UJ-04).` · `Evidence: docs/tasks/T-405-power-overlay.png (save-format v2→v3 + legacy-guard, suite 175/176 — 1 flake perf pre-existing).` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
-- [ ] **T-406 M — Water + pressure.** Tower/pump + pipe/road; falloff jarak/beban; unwatered hentikan growth.
-  `Deps: T-405` · `Accept: bangunan jauh unwatered sampai tower ke-2.` · `Evidence: screenshot.` · `Skills: city-builder-simulation-audit`
+- [x] **T-406 M — Water + pressure.** Tower/pump + pipe/road; falloff jarak/beban; unwatered hentikan growth.
+  `Deps: T-405` · `Accept: bangunan jauh unwatered sampai tower ke-2.` · `Evidence: docs/tasks/T-406-water-overlay.png (save-format v3→v4 + legacy-guard, suite 186/187 — 1 flake perf pre-existing; view bounds culling fix).` · `Skills: city-builder-simulation-audit`
 - [ ] **T-407 S — Overlay utilitas.** Tab power/water/traffic/value + inspector akurat.
   `Deps: T-403,T-405` · `Accept: semua overlay render.` · `Evidence: screenshots.` · `Skills: frontend-ui-engineering, city-builder-visual-qa`
 - [ ] **VS-4 GATE:** UJ-03 + UJ-04 lolos.

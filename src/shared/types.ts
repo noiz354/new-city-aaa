@@ -29,7 +29,7 @@ export interface TileRect {
   y1: number;
 }
 
-export type ToolId = 'select' | 'road' | 'zone-r' | 'zone-c' | 'zone-i' | 'power-line' | 'plant' | 'bulldoze';
+export type ToolId = 'select' | 'road' | 'zone-r' | 'zone-c' | 'zone-i' | 'power-line' | 'plant' | 'water-tower' | 'bulldoze';
 
 /** Player-issued mutations. Every sim state change flows through a Command. */
 export type Command =
@@ -37,6 +37,7 @@ export type Command =
   | { kind: 'paint-zone'; rect: TileRect; zone: 1 | 2 | 3 }
   | { kind: 'place-power-line'; path: TilePos[] }
   | { kind: 'place-plant'; x: number; y: number }
+  | { kind: 'place-tower'; x: number; y: number }
   | { kind: 'bulldoze'; rect: TileRect };
 
 export type CommandResult = { ok: true; cost: number; tiles: number } | { ok: false; reason: string; shortBy?: number };
@@ -56,7 +57,11 @@ export type SimEvent =
   /** Power plant placed (present) or removed (!present) on a tile (T-405 plant markers). */
   | { type: 'plant-changed'; x: number; y: number; present: boolean }
   /** Power-line layer changed somewhere (bulk; view resyncs the line projection wholesale). */
-  | { type: 'power-line-changed' };
+  | { type: 'power-line-changed' }
+  /** Pressure flip on a zoned/building tile (T-406). watered=false shows a blue droplet icon. */
+  | { type: 'water-changed'; x: number; y: number; watered: boolean }
+  /** Water tower placed (present) or removed (!present) on a tile (T-406 tower markers). */
+  | { type: 'tower-changed'; x: number; y: number; present: boolean };
 
 export interface SimDate {
   year: number;
@@ -90,6 +95,11 @@ export interface SaveLayers {
 /** Power section payload (codec section 6, sver 1): player-built plant sites. */
 export interface SavePower {
   plants: TilePos[];
+}
+
+/** Water section payload (codec section 7, sver 1): player-built tower sites. */
+export interface SaveWater {
+  towers: TilePos[];
 }
 
 /** One building-store slot in a save (T-202). state 0 = free slot; slot order = stable building ids. */
@@ -153,6 +163,8 @@ export interface SimSnapshot {
   counts: { roads: number; zonesR: number; zonesC: number; zonesI: number };
   /** T-405: live grid readout (derived; HUD/inspector only). */
   power: { active: boolean; plants: number; nets: number; supplyMw: number; demandMw: number; unpowered: number };
+  /** T-406: live water readout (derived; HUD/inspector only). */
+  water: { active: boolean; towers: number; nets: number; supplyKl: number; demandKl: number; unwatered: number };
 }
 
 // ---- dependency-inversion contracts (module-boundaries §2) ----
@@ -215,6 +227,7 @@ export interface CommandHost {
   validateZone(rect: TileRect): CommandResult & { plan?: ZonePlan };
   validatePowerLine(path: TilePos[]): CommandResult & { plan?: RoadPlan };
   validatePlant(x: number, y: number): CommandResult;
+  validateTower(x: number, y: number): CommandResult;
   validateBulldoze(rect: TileRect): CommandResult & { plan?: BulldozePlan };
 }
 
@@ -226,4 +239,5 @@ export interface SaveSource {
   getSaveEntities(): SaveEntities;
   getSavePolicy(): SavePolicy;
   getSavePower(): SavePower;
+  getSaveWater(): SaveWater;
 }

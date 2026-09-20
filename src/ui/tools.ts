@@ -35,7 +35,7 @@ export class ToolController {
     private readonly view: View,
     private readonly store: UiStore,
     private readonly host: CommandHost,
-    private readonly actions: Pick<UiActions, 'setTool' | 'togglePause' | 'toggleCamera' | 'toggleValueOverlay' | 'togglePowerOverlay' | 'toggleBudget'>,
+    private readonly actions: Pick<UiActions, 'setTool' | 'togglePause' | 'toggleCamera' | 'toggleValueOverlay' | 'togglePowerOverlay' | 'toggleWaterOverlay' | 'toggleBudget'>,
   ) {
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     window.addEventListener('pointermove', (e) => this.onMove(e));
@@ -106,6 +106,7 @@ export class ToolController {
       else if (cmd.kind === 'paint-zone') this.store.toast(`Zoned ${res.tiles} tiles · ${money(res.cost)}`);
       else if (cmd.kind === 'place-power-line') this.store.toast(`Power line · ${money(res.cost)}`);
       else if (cmd.kind === 'place-plant') this.store.toast(`Power plant online · ${money(res.cost)}`);
+      else if (cmd.kind === 'place-tower') this.store.toast(`Water tower online · ${money(res.cost)}`);
       else this.store.toast(res.tiles > 0 ? `Cleared ${res.tiles} tiles · ${money(res.cost)}` : 'Nothing to clear');
     } else {
       this.store.toast(res.shortBy ? `${res.reason} (${money(res.shortBy)} short)` : res.reason);
@@ -128,6 +129,8 @@ export class ToolController {
       this.actions.toggleValueOverlay(); // T-207: land-value gradient overlay
     } else if (e.code === 'KeyP') {
       this.actions.togglePowerOverlay(); // T-405: power-grid overlay
+    } else if (e.code === 'KeyW') {
+      this.actions.toggleWaterOverlay(); // T-406: water-pressure overlay
     } else if (e.code === 'KeyB') {
       this.actions.toggleBudget(); // T-303: budget panel
     } else if (e.code === 'Escape') {
@@ -152,6 +155,7 @@ export class ToolController {
     if (drag.tool === 'zone-i') return { kind: 'paint-zone', rect: normalizeRect(drag.anchor, tile), zone: 3 };
     if (drag.tool === 'power-line') return { kind: 'place-power-line', path: planRoadPath(drag.anchor, tile) };
     if (drag.tool === 'plant') return { kind: 'place-plant', x: tile.x, y: tile.y };
+    if (drag.tool === 'water-tower') return { kind: 'place-tower', x: tile.x, y: tile.y };
     return null;
   }
 
@@ -201,6 +205,14 @@ export class ToolController {
       this.store.set(
         v.ok
           ? { previewCost: v.cost, previewNote: `${money(v.cost)} · 60 MW plant` }
+          : { previewCost: null, previewNote: v.reason },
+      );
+    } else if (drag.tool === 'water-tower') {
+      const v = this.host.validateTower(cur.x, cur.y);
+      this.view.ghost.setTiles(this.toGhostTiles([cur], v.ok ? 'ok' : 'err'));
+      this.store.set(
+        v.ok
+          ? { previewCost: v.cost, previewNote: `${money(v.cost)} · 800 kL tower` }
           : { previewCost: null, previewNote: v.reason },
       );
     } else if (drag.tool === 'power-line') {

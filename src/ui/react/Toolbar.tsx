@@ -24,6 +24,7 @@ export function Toolbar({
     { id: 'bulldoze', label: 'Raze', key: '6', tip: 'Bulldoze area' },
     { id: 'power-line', label: 'Pwr Line', key: '7', tip: `Power line · $${prices.powerLinePerTile}/tile` },
     { id: 'plant', label: 'Plant', key: '8', tip: `Coal plant · $${prices.powerPlant} · 60 MW` },
+    { id: 'water-tower', label: 'Tower', key: '9', tip: `Water tower · $${prices.waterTower} · 800 kL` },
   ];
   return (
     <div className="toolbar panel">

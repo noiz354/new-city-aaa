@@ -6,22 +6,25 @@
 // saves predating section 4 restore with empty buildings (repair note) — no version bump
 // needed while every section stays independently skippable.
 import { gunzipSync, gzipSync } from 'fflate';
-import type { SaveEntities, SaveLayers, SaveMeta, SavePolicy, SavePower, SaveSource } from '../shared/types.js';
+import type { SaveEntities, SaveLayers, SaveMeta, SavePolicy, SavePower, SaveSource, SaveWater } from '../shared/types.js';
 import { crc32Bytes } from '../shared/crc32.js';
 
 export const SAVE_MAGIC = 'CB1S';
 // Bumped 1 -> 2 for T-302 (spec §9 ask-first): v2 adds the policy section (per-zone tax rates).
 // Legacy v1 saves carry no policy section and are migrated to the default 9/9/9 on load (repair note).
 // Bumped 2 -> 3 for T-405 (spec §9 ask-first): v3 adds the power-line layer (layers sver 1 -> 2)
-// plus the power section (plant sites). Pre-v3 saves load with an empty grid → inactive →
+// plus the power section (plant sites).
+// Bumped 3 -> 4 for T-406 (spec §9 ask-first): v4 adds the water section (tower sites).
+// Legacy pre-v4 saves carry no water section and resolve to an empty tower set (repair note). Pre-v3 saves load with an empty grid → inactive →
 // self-powered, so old cities keep growing (legacy-guard, repair note).
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const SECTION_HEADER = 1;
 export const SECTION_LAYERS = 2;
 export const SECTION_META = 3;
 export const SECTION_ENTITIES = 4;
 export const SECTION_POLICY = 5;
 export const SECTION_POWER = 6;
+export const SECTION_WATER = 7;
 
 /** Valid tax-rate range (docs/02 §4, T-302). Clamped on both encode and decode for safety. */
 export const POLICY_TAX_MIN = 0;
@@ -59,6 +62,8 @@ export interface DecodedSave {
   policy: SavePolicy;
   /** Resolved power; always non-null (empty grid for pre-v3 / malformed saves). */
   power: SavePower;
+  /** Resolved water; always non-null (empty tower set for pre-v4 / malformed saves). */
+  water: SaveWater;
   repairs: string[];
 }
 
@@ -224,7 +229,7 @@ export function encodeSave(sim: SaveSource): Uint8Array {
       const h = new Uint8Array(4);
       const dv = new DataView(h.buffer);
       dv.setUint16(0, SAVE_VERSION, true);
-      dv.setUint16(2, 6, true);
+      dv.setUint16(2, 7, true);
       return h;
     })(),
     writeSection(SECTION_HEADER, 1, textEncoder.encode(JSON.stringify(header))),
@@ -233,6 +238,7 @@ export function encodeSave(sim: SaveSource): Uint8Array {
     writeSection(SECTION_ENTITIES, 1, encodeEntities(sim.getSaveEntities())),
     writeSection(SECTION_POLICY, 1, encodePolicy(sim.getSavePolicy())),
     writeSection(SECTION_POWER, 1, encodePower(sim.getSavePower())),
+    writeSection(SECTION_WATER, 1, encodeWater(sim.getSaveWater())),
   ]);
   return gzipSync(inner, { level: 6 });
 }
@@ -263,6 +269,7 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
   let entities: SaveEntities | null = null;
   let policy: SavePolicy | null = null;
   let power: SavePower | null = null;
+  let water: SaveWater | null = null;
   let off = 8;
   for (let s = 0; s < sectionCount; s++) {
     if (off + 7 > inner.length) throw new SaveError('CORRUPT', `section ${s}: truncated header`);
@@ -288,6 +295,8 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
       policy = parsePolicy(payload);
     } else if (id === SECTION_POWER) {
       power = parsePower(payload);
+    } else if (id === SECTION_WATER) {
+      water = parseWater(payload);
     } else {
       repairs.push(`skipped unknown section id ${id} (forward compatibility)`);
     }
@@ -299,7 +308,8 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
   if (entities === null) repairs.push('no entity section (pre-T-202 save): buildings restore empty');
   const resolvedPolicy = resolvePolicy(version, policy, repairs);
   const resolvedPower = resolvePower(version, power, repairs);
-  return { header, layers, meta, entities, policy: resolvedPolicy, power: resolvedPower, repairs };
+  const resolvedWater = resolveWater(version, water, repairs);
+  return { header, layers, meta, entities, policy: resolvedPolicy, power: resolvedPower, water: resolvedWater, repairs };
 }
 
 function parseLayers(payload: Uint8Array, sver: number): SaveLayers {
@@ -383,4 +393,49 @@ function resolvePower(version: number, parsed: SavePower | null, repairs: string
       : 'missing power section: grid inactive, buildings self-powered',
   );
   return { plants: [] };
+}
+
+/** Water payload (section 7, sver 1): u32 towerCount; per tower u16 x, u16 y. */
+function encodeWater(water: SaveWater): Uint8Array {
+  const payload = new Uint8Array(4 + water.towers.length * 4);
+  const dv = new DataView(payload.buffer);
+  dv.setUint32(0, water.towers.length, true);
+  let o = 4;
+  for (const t of water.towers) {
+    dv.setUint16(o, t.x, true);
+    dv.setUint16(o + 2, t.y, true);
+    o += 4;
+  }
+  return payload;
+}
+
+function parseWater(payload: Uint8Array): SaveWater {
+  if (payload.length < 4) throw new SaveError('CORRUPT', 'water payload too short');
+  const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  const count = dv.getUint32(0, true);
+  if (count > (1 << 20)) throw new SaveError('CORRUPT', `implausible tower count ${count}`);
+  if (payload.length < 4 + count * 4) throw new SaveError('CORRUPT', 'water payload truncated');
+  const towers: SaveWater['towers'] = [];
+  let o = 4;
+  for (let k = 0; k < count; k++) {
+    towers.push({ x: dv.getUint16(o, true), y: dv.getUint16(o + 2, true) });
+    o += 4;
+  }
+  return { towers };
+}
+
+/**
+ * Migration step: towers landed at save-version 4. Pre-v4 saves have none; the grid resolves
+ * empty and stays inactive while no tower exists (spec §9 legacy-guard: no tower anywhere
+ * means water was never a constraint, so old cities keep growing). A v4 save missing the
+ * section is repaired the same way.
+ */
+function resolveWater(version: number, parsed: SaveWater | null, repairs: string[]): SaveWater {
+  if (parsed) return parsed;
+  repairs.push(
+    version < 4
+      ? 'pre-v4 save (no water section): no towers, water constraint inactive'
+      : 'missing water section: no towers, water constraint inactive',
+  );
+  return { towers: [] };
 }

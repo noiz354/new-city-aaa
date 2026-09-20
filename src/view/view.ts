@@ -8,6 +8,7 @@ import { FpsOverlay } from './f3.js';
 import { BlockedIconLayer } from './icons.js';
 import { LandValueOverlay, type FieldsView } from './landvalue.js';
 import { PlantLayer, PowerLineLayer, PowerOverlay, type PowerView, UnpoweredIconLayer } from './power.js';
+import { TowerLayer, UnwateredIconLayer, WaterOverlay, type WaterView } from './watergrid.js';
 import { GhostLayer, HoverMarker } from './highlight.js';
 import { Picker, type PickResult } from './picking.js';
 import { RoadLayer } from './roads.js';
@@ -33,6 +34,10 @@ export class View {
   private powerLines: PowerLineLayer; // T-405: pylon markers on power-line tiles
   private powerOv: PowerOverlay; // T-405: net tint overlay (hidden by default)
   private power: PowerView | null = null;
+  private waterIcons: UnwateredIconLayer; // T-406: blue cones for unwatered lots
+  private towers: TowerLayer; // T-406: water-tower markers
+  private waterOv: WaterOverlay; // T-406: pressure tint overlay (hidden by default)
+  private water: WaterView | null = null;
   private landValueOv: LandValueOverlay;
   private fields: FieldsView | null = null;
   private readonly f3: FpsOverlay;
@@ -65,6 +70,12 @@ export class View {
     this.sceneMgr.scene.add(this.powerLines.group);
     this.powerOv = new PowerOverlay(world);
     this.sceneMgr.scene.add(this.powerOv.mesh);
+    this.waterIcons = new UnwateredIconLayer(world);
+    this.sceneMgr.scene.add(this.waterIcons.group);
+    this.towers = new TowerLayer(world);
+    this.sceneMgr.scene.add(this.towers.group);
+    this.waterOv = new WaterOverlay(world);
+    this.sceneMgr.scene.add(this.waterOv.mesh);
     this.landValueOv = new LandValueOverlay(world);
     this.sceneMgr.scene.add(this.landValueOv.mesh);
     this.sceneMgr.scene.add(this.hover.group);
@@ -118,6 +129,19 @@ export class View {
       this.powerOv.update(world, this.power);
       this.powerOv.setVisible(true); // preserve on-state across the load rebuild
     }
+    this.waterIcons.dispose();
+    this.waterIcons = new UnwateredIconLayer(world);
+    this.sceneMgr.scene.add(this.waterIcons.group);
+    this.towers.dispose();
+    this.towers = new TowerLayer(world);
+    this.sceneMgr.scene.add(this.towers.group);
+    this.waterOv.dispose();
+    this.waterOv = new WaterOverlay(world);
+    this.sceneMgr.scene.add(this.waterOv.mesh);
+    if (this.water !== null) {
+      this.waterOv.update(world, this.water);
+      this.waterOv.setVisible(true); // preserve on-state across the load rebuild
+    }
     this.landValueOv.dispose();
     this.landValueOv = new LandValueOverlay(world);
     this.sceneMgr.scene.add(this.landValueOv.mesh);
@@ -136,6 +160,8 @@ export class View {
       else if (e.type === 'power-changed') this.powerIcons.apply(e); // T-405
       else if (e.type === 'plant-changed') this.plants.apply(e.x, e.y, e.present); // T-405
       else if (e.type === 'power-line-changed') this.powerLines.resync(this.world); // T-405
+      else if (e.type === 'water-changed') this.waterIcons.apply(e); // T-406
+      else if (e.type === 'tower-changed') this.towers.apply(e.x, e.y, e.present); // T-406
     }
   }
 
@@ -154,6 +180,25 @@ export class View {
     this.powerIcons.sync(unpowered);
     if (this.power !== null) this.plants.sync(PowerLineLayer.plantTiles(this.world, this.power));
     this.powerLines.resync(this.world);
+  }
+
+  /** Rebuild water markers wholesale (boot + post-load full sync). */
+  syncWater(unwatered: TilePos[]): void {
+    this.waterIcons.sync(unwatered);
+    if (this.water !== null) this.towers.sync(TowerLayer.towerTiles(this.world, this.water));
+  }
+
+  /** T-406: bind the sim WaterGrid (grid truth) and refresh the overlay tint. */
+  attachWater(water: WaterView, visible: boolean): void {
+    this.water = water;
+    this.towers.sync(TowerLayer.towerTiles(this.world, water));
+    this.waterOv.update(this.world, water);
+    this.waterOv.setVisible(visible);
+  }
+
+  /** 4 Hz refresh while the overlay is on (water flags change only at day boundaries anyway). */
+  refreshWater(): void {
+    if (this.water !== null && this.waterOv.visible) this.waterOv.update(this.world, this.water);
   }
 
   /** T-405: bind the sim PowerGrid (grid truth) and refresh the overlay tint. */

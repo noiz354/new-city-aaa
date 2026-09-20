@@ -20,6 +20,8 @@ export interface UiState {
   valueOverlay: boolean;
   /** T-405: power-grid overlay visible? (toggles via TopBar / P key) */
   powerOverlay: boolean;
+  /** T-406: water-pressure overlay visible? (toggles via TopBar / W key) */
+  waterOverlay: boolean;
   /** T-303: budget panel open (breakdown + 12-month sparkline). */
   budgetOpen: boolean;
 }
@@ -44,6 +46,7 @@ export class UiStore {
       storageDriver: '?',
       valueOverlay: false,
       powerOverlay: false,
+      waterOverlay: false,
       budgetOpen: false,
     };
   }

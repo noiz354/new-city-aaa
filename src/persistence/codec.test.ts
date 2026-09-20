@@ -4,7 +4,7 @@ import { crc32Bytes } from '../shared/crc32.js';
 import { planRoadPath } from '../shared/grid.js';
 import { Sim } from '../sim/sim.js';
 import { runDays } from '../testing/fixtures.js';
-import { decodeSave, encodeSave, SAVE_VERSION, SECTION_LAYERS, SECTION_POLICY, SECTION_POWER, SaveError } from './codec.js';
+import { decodeSave, encodeSave, SAVE_VERSION, SECTION_LAYERS, SECTION_POLICY, SECTION_POWER, SECTION_WATER, SaveError } from './codec.js';
 
 function builtSim(): Sim {
   const sim = new Sim({ size: 64, seed: 9, preset: 'plains' });
@@ -50,7 +50,7 @@ describe('codec', () => {
     expect(dec.header.game).toBe('city-builder-aaa');
     expect(dec.header.worldSeed).toBe(9);
     const sim2 = new Sim({ size: 64, seed: 1234, preset: 'plains' });
-    sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power);
+    sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
     expect(sim2.hash()).toBe(hashA);
     expect(sim2.snapshot().tax).toEqual(sim.snapshot().tax); // T-302: tax rates survive the round-trip
     expect(sim2.snapshot()).toEqual(sim.snapshot());
@@ -61,7 +61,7 @@ describe('codec', () => {
     const bytes = encodeSave(a);
     const b = new Sim({ size: 64, seed: 1, preset: 'plains' });
     const dec = decodeSave(bytes);
-    b.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power);
+    b.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
     runDays(a, 3);
     runDays(b, 3);
     expect(b.hash()).toBe(a.hash());
@@ -160,23 +160,24 @@ describe('codec', () => {
     expect(dec.entities).toBeNull();
     expect(dec.repairs.some((r) => r.includes('entity'))).toBe(true);
     const sim2 = new Sim({ size: 64, seed: 9, preset: 'plains' });
-    sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power);
+    sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
     expect(sim2.buildings.count).toBe(0);
     expect(sim2.snapshot().population).toBe(0);
   });
 });
 
 describe('T-302 — save-format v2 + policy section (spec §9 ask-first)', () => {
-  it('bumped the save version to 3 and writes policy (id 5) + power (id 6) sections', () => {
-    expect(SAVE_VERSION).toBe(3);
+  it('bumped the save version to 4 and writes policy (id 5) + power (id 6) + water (id 7) sections', () => {
+    expect(SAVE_VERSION).toBe(4);
     expect(SECTION_POLICY).toBe(5);
     expect(SECTION_POWER).toBe(6);
+    expect(SECTION_WATER).toBe(7);
     const sim = builtSim();
     const inner = gunzipSync(encodeSave(sim));
     // magic(4) + version(2) + count(2) + sections...
     const dv = new DataView(inner.buffer, inner.byteOffset, inner.byteLength);
-    expect(dv.getUint16(4, true)).toBe(3);
-    expect(dv.getUint16(6, true)).toBe(6); // header, layers, meta, entities, policy, power
+    expect(dv.getUint16(4, true)).toBe(4);
+    expect(dv.getUint16(6, true)).toBe(7); // header, layers, meta, entities, policy, power, water
     // The policy section is present and decodes to the default 9/9/9 (builtSim never calls setTax).
     const dec = decodeSave(encodeSave(sim));
     expect(dec.policy).toEqual({ tax: { r: 9, c: 9, i: 9 } });
@@ -191,7 +192,7 @@ describe('T-302 — save-format v2 + policy section (spec §9 ask-first)', () =>
     const bytes = encodeSave(sim);
     const dec = decodeSave(bytes);
     const restored = new Sim({ size: 64, seed: 99, preset: 'plains' });
-    restored.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power);
+    restored.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
     expect(restored.snapshot().tax).toEqual({ r: 15, c: 4, i: 20 });
     // And a save→load→continue matches an uninterrupted run at those rates.
     const a = builtSim();
@@ -300,7 +301,7 @@ describe('T-405 — save-format v3 + power section (spec §9 ask-first, legacy-g
     expect(dec.repairs).toEqual([]);
     expect(dec.power).toEqual({ plants: [{ x: 8, y: 28 }] });
     const sim2 = new Sim({ size: 64, seed: 1234, preset: 'plains' });
-    sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power);
+    sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
     expect(sim2.hash()).toBe(hashA);
     expect(sim2.snapshot().power).toEqual(sim.snapshot().power);
     expect(sim2.world.counts.lines).toBe(2);
@@ -310,7 +311,7 @@ describe('T-405 — save-format v3 + power section (spec §9 ask-first, legacy-g
     const a = poweredSim();
     const b = new Sim({ size: 64, seed: 1, preset: 'plains' });
     const dec = decodeSave(encodeSave(a));
-    b.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power);
+    b.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
     runDays(a, 3);
     runDays(b, 3);
     expect(b.hash()).toBe(a.hash());
@@ -324,7 +325,7 @@ describe('T-405 — save-format v3 + power section (spec §9 ask-first, legacy-g
     expect(dec.power).toEqual({ plants: [] });
     // The plant site and line tiles are gone (v2 knew neither), so the grid is inactive…
     const sim2 = new Sim({ size: 64, seed: 5, preset: 'plains' });
-    sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power);
+    sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
     expect(sim2.power.active).toBe(false);
     // …and the legacy city keeps growing exactly like it did before power existed (§9):
     // fresh zones still spawn and move in on the inactive (self-powered) grid.
@@ -344,6 +345,83 @@ describe('T-405 — save-format v3 + power section (spec §9 ask-first, legacy-g
       const sid = inner[off] as number;
       const len = dv.getUint32(off + 3, true);
       if (sid === SECTION_POWER) inner[off + 7] = (inner[off + 7] as number) ^ 0xff;
+      off += 7 + len + 4;
+    }
+    expect(() => decodeSave(gzipSync(inner))).toThrowError(/CRC/);
+  });
+});
+
+describe('T-406 — save-format v4 + water section (spec §9 ask-first, legacy-guard)', () => {
+  /** City with a tower-fed grid: tower + houses to draw load. */
+  function wateredSim(): Sim {
+    const sim = new Sim({ size: 64, seed: 9, preset: 'plains' });
+    sim.execute({ kind: 'place-road', path: planRoadPath({ x: 4, y: 30 }, { x: 60, y: 30 }) });
+    sim.execute({ kind: 'paint-zone', rect: { x0: 10, y0: 29, x1: 14, y1: 29 }, zone: 1 });
+    const t = sim.execute({ kind: 'place-tower', x: 8, y: 28 });
+    if (!t.ok) throw new Error(`tower: ${t.reason}`);
+    runDays(sim, 6);
+    sim.drainEvents();
+    return sim;
+  }
+
+  /** Rewrite a v4 inner blob as a genuine v3 blob: drop the water section and relabel the
+      version. Layers are unchanged v3→v4, so no payload rebuild is needed (unlike toLegacyV2). */
+  function toLegacyV3(v4inner: Uint8Array): Uint8Array {
+    const dropped = stripSection(v4inner, SECTION_WATER);
+    new DataView(dropped.buffer).setUint16(4, 3, true); // save version 3
+    return dropped;
+  }
+
+  it('round-trips towers with an identical hash', () => {
+    const sim = wateredSim();
+    expect(sim.snapshot().water.towers).toBe(1);
+    const hashA = sim.hash();
+    const dec = decodeSave(encodeSave(sim));
+    expect(dec.repairs).toEqual([]);
+    expect(dec.water).toEqual({ towers: [{ x: 8, y: 28 }] });
+    const sim2 = new Sim({ size: 64, seed: 1234, preset: 'plains' });
+    sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
+    expect(sim2.hash()).toBe(hashA);
+    expect(sim2.snapshot().water).toEqual(sim.snapshot().water);
+  });
+
+  it('save/load mid-game then continue === uninterrupted run (watered city)', () => {
+    const a = wateredSim();
+    const bytes = encodeSave(a);
+    const b = new Sim({ size: 64, seed: 1, preset: 'plains' });
+    const dec = decodeSave(bytes);
+    b.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
+    runDays(a, 3);
+    runDays(b, 3);
+    expect(b.hash()).toBe(a.hash());
+  });
+
+  it('migrates a pre-v4 save: empty towers + repair note, old city keeps growing', () => {
+    const sim = wateredSim();
+    const legacy = toLegacyV3(gunzipSync(encodeSave(sim)).slice());
+    const dec = decodeSave(gzipSync(legacy));
+    expect(dec.repairs.some((r) => r.toLowerCase().includes('water'))).toBe(true);
+    expect(dec.water).toEqual({ towers: [] });
+    const sim2 = new Sim({ size: 64, seed: 5, preset: 'plains' });
+    sim2.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
+    expect(sim2.water.active).toBe(false);
+    // …and the legacy city keeps growing exactly like it did before water existed (§9):
+    const grow = sim2.execute({ kind: 'paint-zone', rect: { x0: 20, y0: 29, x1: 24, y1: 29 }, zone: 1 });
+    if (!grow.ok) throw new Error(`zone: ${grow.reason}`);
+    const before = sim2.buildings.count;
+    runDays(sim2, 8);
+    expect(sim2.buildings.count).toBeGreaterThan(before);
+  });
+
+  it('rejects a tampered water section (CRC)', () => {
+    const inner = gunzipSync(encodeSave(wateredSim())).slice();
+    const dv = new DataView(inner.buffer, inner.byteOffset, inner.byteLength);
+    const count = dv.getUint16(6, true);
+    let off = 8;
+    for (let s = 0; s < count; s++) {
+      const sid = inner[off] as number;
+      const len = dv.getUint32(off + 3, true);
+      if (sid === SECTION_WATER) inner[off + 7] = (inner[off + 7] as number) ^ 0xff;
       off += 7 + len + 4;
     }
     expect(() => decodeSave(gzipSync(inner))).toThrowError(/CRC/);

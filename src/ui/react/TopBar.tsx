@@ -13,6 +13,7 @@ export function TopBar({
   actions,
   valueOverlay,
   powerOverlay,
+  waterOverlay,
 }: {
   snapshot: SimSnapshot;
   projection: 'ortho' | 'persp';
@@ -20,6 +21,7 @@ export function TopBar({
   actions: UiActions;
   valueOverlay: boolean;
   powerOverlay: boolean;
+  waterOverlay: boolean;
 }): JSX.Element {
   const d = snapshot.date;
   const speeds: { label: string; value: 0 | 1 | 2 | 3 }[] = [
@@ -79,12 +81,20 @@ export function TopBar({
         Value
       </button>
       {/* T-405: power-grid overlay (nets + unpowered lots) */}
+      {/* T-406: water-pressure overlay (gradient + unwatered lots) */}
       <button
         className={powerOverlay ? 'on' : ''}
         onClick={() => actions.togglePowerOverlay()}
         title="Power grid overlay (P)"
       >
         Power
+      </button>
+      <button
+        className={waterOverlay ? 'on' : ''}
+        onClick={() => actions.toggleWaterOverlay()}
+        title="Water pressure overlay (W)"
+      >
+        Water
       </button>
       <span className="stat dim" title="Save storage driver">
         {driver}
