@@ -18,6 +18,11 @@
 > bukti screenshot VS-2a/T-303 tertangkap → **T-202..T-208 `[x]`, T-303 `[x]`, VS-2 GATE `[x]` (visual)**.
 > Tiga bug ditemukan oleh capture & diperbaiki dengan test: culling InstancedMesh (rumah/ikon hilang saat kamera geser),
 > Net budget panel tanpa subsidi, demand tak di-recompute saat load.
+> Update 2026-09-20 #1: **T-302 `[x]`** — slider pajak R/C/I (0–20%, default 9%) + persistensi tax rate via
+> **save-format v2 + migrasi** (keputusan §9 ask-first yang sebelumnya di-skip, disetujui user: v2+migration).
+> SAVE_VERSION 1→2, section 5 (policy: tax r/c/i); save v1 (tanpa policy) di-migrasi ke default 9/9/9 + repair note.
+> `codec.test.ts` +3 test (version/policy, persist custom tax, migrasi v1→v2), `economy.test.ts` +1 (15%→income↑).
+> Suite **147/147**, lint/arch/licenses/typecheck/build hijau. T-304…T-306 kini tidak lagi ter-gate keputusan format save.
 
 ## VS-0 — Foundation (T-1xx)
 
@@ -168,9 +173,20 @@
     + BankruptcyModal (T-303 mengganti dengan budget panel); setTax clamp 0..20 (seam T-302).
   - **Evidence: vitest log** — economy.test.ts 7/7 (income exact 23 = 25×0.92; clamp; settle+ring; wrap;
     bankrupt recover; cadence) + 3 upkeep tests direvisi ke settle-semantics. Suite 138/138, perf hijau.
-  - **Note:** service funding (slider 50/100/150%) milik T-303; tax-rate persist ikut T-302 (§9-format).
-- [ ] **T-302 M — Slider pajak R/C/I.** 0–20% (default 9%); income = Σ level×rate×happinessFactor.
+  - **Note:** service funding (slider 50/100/150%) milik VS-5 (T-303 selesai tanpa funding — belum ada service era ini);
+    tax-rate persist telah selesai di T-302 via v2 + migrasi (keputusan §9 ask-first **resolved**).
+- [x] **T-302 M — Slider pajak R/C/I.** 0–20% (default 9%); income = Σ level×rate×happinessFactor.
   `Deps: T-301` · `Accept: 15% → income↑ happiness↓ (UJ-05 partial).` · `Evidence: screenshot + test.` · `Skills: frontend-ui-engineering`
+  - **Status: DONE 2026-09-20.** Slider R/C/I 0–20% di `BudgetPanel.tsx` (onTax → `economy.setTax`, clamp 0..20,
+    snapshot.tax membumikan nilai slider); persistensi tax rate via **save-format v2 + migrasi** (keputusan §9
+    ask-first: user menyetujui v2+migration). `codec.ts`: SAVE_VERSION 1→2, `SECTION_POLICY=5`, `encodePolicy`/
+    `parsePolicy`/`resolvePolicy` (default 9/9/9 untuk save pre-v2 / korup). `Sim.getSavePolicy()` + `loadState`
+    menerapkan policy; `SaveSource` & `SimSnapshot` membawa policy. `main.ts` menyalurkan `dec.policy` saat load.
+  - **Evidence: vitest log** — `economy.test.ts` 15%→income↑ (8 test ekonomi); `codec.test.ts` +3 (version/policy
+    hadir; custom tax 15/4/20 round-trip + continuation hash-equal; save v1 tanpa policy → default 9/9/9 + repair
+    note). `BudgetPanel.test.tsx` +1 (3 slider di-render di nilai saat ini). `npm run ci` hijau (147/147).
+  - **Note:** service funding (slider 50/100/150%) tetap milik VS-5 (belum ada service era ini); tidak di-persist
+    bersama T-302. Tax rate kini di-persist (§9 resolved: v2 + migrasi).
 - [x] **T-303 M — Budget panel.** Breakdown income/expense + sparkline 12 bulan + slider funding service.
   `Deps: T-301` · `Accept: panel akurat vs sim.` · `Evidence: screenshot.` · `Skills: vercel-react-best-practices, frontend-ui-engineering`
   - **Status: engine-complete 2026-09-19.** `BudgetPanel.tsx` (panel atas modal): breakdown exact dari

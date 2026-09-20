@@ -14,6 +14,7 @@ function snap(over: Partial<SimSnapshot>): SimSnapshot {
       balance: 50_000,
       population: 0,
       demand: { r: 0, c: 0, i: 0 },
+      tax: { r: 9, c: 9, i: 9 },
       jobs: 0,
       unemployment: 0,
       bankrupt: false,

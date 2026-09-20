@@ -59,14 +59,14 @@ async function boot(): Promise<void> {
     await storage.save(slot, bytes);
     store.toast(`Saved ${slot} (${(bytes.length / 1024).toFixed(1)} KB)`);
   };
-  const load = async (slot: SlotId): Promise<void> => {
+    const load = async (slot: SlotId): Promise<void> => {
     const bytes = await storage.load(slot);
     if (!bytes) {
       store.toast(`Slot ${slot} is empty`);
       return;
     }
     const dec = decodeSave(bytes);
-    sim.loadState(dec.meta, dec.layers, dec.entities ?? undefined);
+    sim.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy);
     view.setWorld(sim.world);
     view.syncBuildings(sim.buildings.serialize().slots);
     view.syncIcons(sim.roadAccess.collectBlocked()); // T-204: post-load icon resync
@@ -99,6 +99,12 @@ async function boot(): Promise<void> {
       store.set({ valueOverlay: next });
     },
     toggleBudget: () => store.set({ budgetOpen: !store.getState().budgetOpen }), // T-303
+    // T-302: tax-rate writer (the seam economy.setTax existed for). Pushes a fresh snapshot so the
+    // sliders re-render at the clamped value; persistence rides the next save via section 5.
+    setTax: (zone, rate) => {
+      sim.economy.setTax(zone, rate);
+      store.set({ snapshot: sim.snapshot() });
+    },
     // T-204 FR-C06: sim-owned blocking reason for the Inspector (growth.growthBlockReason
     // probe; icon layer is the visual twin — both read the same attachment truth).
     growthBlockReason: (x, y) => sim.growth.growthBlockReason(x, y),

@@ -93,6 +93,15 @@ export interface SaveEntities {
   slots: BuildingSlotData[];
 }
 
+/**
+ * Policy section payload (codec section 5, sver 1). Per-zone tax rates (0..20 %) introduced
+ * at save-version 2 (T-302, spec §9 ask-first). Service funding lands later (VS-5) as an
+ * additional optional field — parsePolicy tolerates a longer payload and missing bytes.
+ */
+export interface SavePolicy {
+  tax: { r: number; c: number; i: number };
+}
+
 /** One settled month as the HUD sees it (all integers; sim/economy.ts MonthEntry mirrors it). */
 export interface MonthLedger {
   income: number;
@@ -107,6 +116,8 @@ export interface SimSnapshot {
   population: number;
   /** T-206 FR-S02: RCI demand ∈ [−100,100], integer-rounded for the HUD bars. */
   demand: { r: number; c: number; i: number };
+  /** T-302: per-zone tax rate (0..20 %); surfaced so the tax sliders render current values. */
+  tax: { r: number; c: number; i: number };
   /** T-208 FR-U02 cohort-vs-jobs readout: 0 by canonical ledger — model lands with T-305. */
   jobs: number;
   /** T-208 FR-U02: fraction currently unemployed ∈ [0,1]; same T-305 ledger ⇒ 0. */
@@ -190,4 +201,5 @@ export interface SaveSource {
   getSaveMeta(): SaveMeta;
   getSaveLayers(): SaveLayers;
   getSaveEntities(): SaveEntities;
+  getSavePolicy(): SavePolicy;
 }

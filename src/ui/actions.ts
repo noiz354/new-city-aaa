@@ -21,6 +21,8 @@ export interface UiActions {
   toggleValueOverlay(): void;
   /** T-303: open/close the budget panel. */
   toggleBudget(): void;
+  /** T-302: set a zone's tax rate (0..20 %); clamped by the sim. */
+  setTax(zone: 'r' | 'c' | 'i', rate: number): void;
   /** T-204 FR-C06: why is growth blocked on this lot? (null = not blocked) */
   growthBlockReason(x: number, y: number): 'unzoned' | 'occupied' | 'no-demand' | 'no-road-access' | null;
   /** Sim-owned, player-facing text for the no-road-attachment block (FR-C06/VS-2a). */

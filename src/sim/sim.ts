@@ -6,6 +6,7 @@ import type {
   SaveEntities,
   SaveLayers,
   SaveMeta,
+  SavePolicy,
   SimEvent,
   SimSnapshot,
 } from '../shared/types.js';
@@ -190,6 +191,7 @@ export class Sim {
         c: Math.round(this.demand.target().c),
         i: Math.round(this.demand.target().i),
       },
+      tax: { r: this.economy.tax.r, c: this.economy.tax.c, i: this.economy.tax.i },
       // T-208: jobs/unemployment 0 per demand.ts's T-305 cohort ledger (visible-but-honest zeros).
       jobs: 0,
       unemployment: 0,
@@ -227,7 +229,11 @@ export class Sim {
     return this.buildings.serialize();
   }
 
-  loadState(meta: SaveMeta, layers: SaveLayers, entities?: SaveEntities): void {
+  getSavePolicy(): SavePolicy {
+    return { tax: { ...this.economy.tax } };
+  }
+
+  loadState(meta: SaveMeta, layers: SaveLayers, entities?: SaveEntities, policy?: SavePolicy): void {
     if (meta.worldSize !== this.world.size) {
       throw new Error(`save size ${meta.worldSize} != world size ${this.world.size} (resize unsupported)`);
     }
@@ -245,6 +251,13 @@ export class Sim {
     this.clock.setState({ tick: meta.tick, accumulator: meta.accumulator, speed });
     this.economy.balance = meta.balance;
     this.rng.setState({ seed: meta.rngSeed, state: meta.rngState });
+    // T-302 (v2 save-format): restore persisted per-zone tax rates. setTax clamps, so a corrupted
+    // rate is repaired rather than trusted; absence (pre-v2 save) leaves the 9/9/9 default.
+    if (policy) {
+      this.economy.setTax('r', policy.tax.r);
+      this.economy.setTax('c', policy.tax.c);
+      this.economy.setTax('i', policy.tax.i);
+    }
     this.events.push({ type: 'treasury-changed', balance: this.economy.balance });
   }
 

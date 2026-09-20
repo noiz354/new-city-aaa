@@ -5,10 +5,10 @@
 > Kanonis baru: spec di `../spec.md`, roadmap VS-0..VS-9 di `../../roadmap.md`, tasks T-1xx..T-9xx di `../../tasks.md`.
 > Reconcile 2026-09-19: hanya VS-0/VS-1 yang `[x]` terverifikasi; klaim selesai lain di dokumen lama = rencana, bukan fakta.
 
-- **Updated:** 2026-09-19 #12 (Asia/Jakarta)
-- **HEAD:** VS-2a visual evidence + 3 capture-found fixes (see `git log`)
+- **Updated:** 2026-09-19 #12 · 2026-09-20 #1 (Asia/Jakarta)
+- **HEAD:** T-302 — tax sliders + save-format v2 + migrasi (§9 ask-first resolved, user-approved)
 - **Slices complete:** VS-0, VS-1, **VS-2a ✅ (engine + visual — `npm run e2e` 8/8 hijau di sandbox).**
-  VS-3: T-301/T-303 ✅; T-302 🔒 keputusan format save (§9).
+  VS-3: T-301/T-303 ✅; T-302 ✅ (slider pajak + persist tax rate via v2 + migrasi, §9 resolved).
 
 ## Slice status
 
@@ -16,7 +16,7 @@
 |-------|-------|----------|
 | VS-0 Scaffold | ✅ DONE | `evidence/vs0-smoke.png`, CI green, `perf/baseline.json` |
 | VS-1 First tile | ✅ DONE | `evidence/vs1-{boot,built,loaded,persp,bay}.png`, 47 unit + 6 E2E green, coverage 86.6/72.5/82.5 |
-| VS-3 Economy | 🔶 IN PROGRESS | T-301 ✅ · T-303 ✅ (`evidence/vs3-t303-budget-panel.png`) · T-302 🔒 §9 save-format decision · T-304/305/306 menunggu T-302 |
+| VS-3 Economy | 🔶 IN PROGRESS | T-301 ✅ · T-302 ✅ (slider pajak + v2 save-migrasi) · T-303 ✅ (`evidence/vs3-t303-budget-panel.png`) · T-304/305/306 now unlocked |
 | VS-2a First House | ✅ DONE | T-201..T-208 ✅ · `evidence/vs2a-*.png` (8 capture) · suite 142/142 · e2e 8/8 · dayP95 ≤ budget |
 | VS-2b..VS-7 | ⬜ QUEUED | — |
 

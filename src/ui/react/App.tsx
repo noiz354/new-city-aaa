@@ -24,7 +24,7 @@ export function App({ store, actions, prices }: { store: UiStore; actions: UiAct
       <Toolbar tool={s.tool} previewCost={s.previewCost} previewNote={s.previewNote} actions={actions} prices={prices} />
       <Inspector tile={s.selectedTile} world={store.world} actions={actions} />
       <BankruptcyModal snapshot={s.snapshot} />
-      {s.budgetOpen && <BudgetPanel snapshot={s.snapshot} onClose={() => actions.toggleBudget()} />}
+      {s.budgetOpen && <BudgetPanel snapshot={s.snapshot} onClose={() => actions.toggleBudget()} onTax={actions.setTax} />}
       {s.toast && (
         <div className="toast panel" key={s.toast.id}>
           {s.toast.text}

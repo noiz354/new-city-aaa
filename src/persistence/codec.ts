@@ -6,15 +6,23 @@
 // saves predating section 4 restore with empty buildings (repair note) — no version bump
 // needed while every section stays independently skippable.
 import { gunzipSync, gzipSync } from 'fflate';
-import type { SaveEntities, SaveLayers, SaveMeta, SaveSource } from '../shared/types.js';
+import type { SaveEntities, SaveLayers, SaveMeta, SavePolicy, SaveSource } from '../shared/types.js';
 import { crc32Bytes } from '../shared/crc32.js';
 
 export const SAVE_MAGIC = 'CB1S';
-export const SAVE_VERSION = 1;
+// Bumped 1 -> 2 for T-302 (spec §9 ask-first): v2 adds the policy section (per-zone tax rates).
+// Legacy v1 saves carry no policy section and are migrated to the default 9/9/9 on load (repair note).
+export const SAVE_VERSION = 2;
 export const SECTION_HEADER = 1;
 export const SECTION_LAYERS = 2;
 export const SECTION_META = 3;
 export const SECTION_ENTITIES = 4;
+export const SECTION_POLICY = 5;
+
+/** Valid tax-rate range (docs/02 §4, T-302). Clamped on both encode and decode for safety. */
+export const POLICY_TAX_MIN = 0;
+export const POLICY_TAX_MAX = 20;
+export const POLICY_TAX_DEFAULT = 9;
 
 export type SaveErrorCode = 'NOT_A_SAVE' | 'UNSUPPORTED_VERSION' | 'CORRUPT' | 'IO';
 
@@ -43,6 +51,8 @@ export interface DecodedSave {
   meta: SaveMeta;
   /** Building store; null on saves predating section 4 (restore as empty). */
   entities: SaveEntities | null;
+  /** Resolved policy; always non-null (defaults applied for pre-v2 / malformed saves). */
+  policy: SavePolicy;
   repairs: string[];
 }
 
@@ -130,6 +140,51 @@ function parseEntities(payload: Uint8Array): SaveEntities {
   return { slots };
 }
 
+/** Clamp a stored tax rate to the docs/02 §4 / T-302 range. */
+function clampTax(v: number): number {
+  return Math.max(POLICY_TAX_MIN, Math.min(POLICY_TAX_MAX, Math.round(v)));
+}
+
+/** Policy payload (section 5, sver 1): three u8 tax rates r/c/i (clamped 0..20). */
+function encodePolicy(policy: SavePolicy): Uint8Array {
+  const payload = new Uint8Array(3);
+  payload[0] = clampTax(policy.tax.r);
+  payload[1] = clampTax(policy.tax.c);
+  payload[2] = clampTax(policy.tax.i);
+  return payload;
+}
+
+function parsePolicy(payload: Uint8Array): SavePolicy {
+  if (payload.length < 3) throw new SaveError('CORRUPT', 'policy payload too short');
+  return {
+    tax: {
+      r: clampTax(payload[0] as number),
+      c: clampTax(payload[1] as number),
+      i: clampTax(payload[2] as number),
+    },
+  };
+}
+
+function defaultPolicy(): SavePolicy {
+  return { tax: { r: POLICY_TAX_DEFAULT, c: POLICY_TAX_DEFAULT, i: POLICY_TAX_DEFAULT } };
+}
+
+/**
+ * Migration step: policy (tax rates) was introduced at save-version 2. Pre-v2 saves have no
+ * section 5; malformed v2 saves may be missing it too. Either way we default to 9/9/9 and log a
+ * repair note (per the validate→migrate→repair→verify pipeline in docs/02 §4). Extend this when
+ * new policy fields land — each becomes an additive default so old saves keep loading.
+ */
+function resolvePolicy(version: number, parsed: SavePolicy | null, repairs: string[]): SavePolicy {
+  if (parsed) return parsed;
+  repairs.push(
+    version < 2
+      ? 'pre-v2 save (no policy section): tax rates defaulted to 9/9/9'
+      : 'missing policy section: tax rates defaulted to 9/9/9',
+  );
+  return defaultPolicy();
+}
+
 export function encodeSave(sim: SaveSource): Uint8Array {
   const snap = sim.snapshot();
   const header: SaveHeader = {
@@ -160,13 +215,14 @@ export function encodeSave(sim: SaveSource): Uint8Array {
       const h = new Uint8Array(4);
       const dv = new DataView(h.buffer);
       dv.setUint16(0, SAVE_VERSION, true);
-      dv.setUint16(2, 4, true);
+      dv.setUint16(2, 5, true);
       return h;
     })(),
     writeSection(SECTION_HEADER, 1, textEncoder.encode(JSON.stringify(header))),
     writeSection(SECTION_LAYERS, 1, layersPayload),
     writeSection(SECTION_META, 1, textEncoder.encode(JSON.stringify(meta))),
     writeSection(SECTION_ENTITIES, 1, encodeEntities(sim.getSaveEntities())),
+    writeSection(SECTION_POLICY, 1, encodePolicy(sim.getSavePolicy())),
   ]);
   return gzipSync(inner, { level: 6 });
 }
@@ -195,6 +251,7 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
   let layers: SaveLayers | null = null;
   let meta: SaveMeta | null = null;
   let entities: SaveEntities | null = null;
+  let policy: SavePolicy | null = null;
   let off = 8;
   for (let s = 0; s < sectionCount; s++) {
     if (off + 7 > inner.length) throw new SaveError('CORRUPT', `section ${s}: truncated header`);
@@ -215,6 +272,8 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
       meta = JSON.parse(textDecoder.decode(payload)) as SaveMeta;
     } else if (id === SECTION_ENTITIES) {
       entities = parseEntities(payload);
+    } else if (id === SECTION_POLICY) {
+      policy = parsePolicy(payload);
     } else {
       repairs.push(`skipped unknown section id ${id} (forward compatibility)`);
     }
@@ -224,7 +283,8 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
   if (!layers) throw new SaveError('CORRUPT', 'missing layers section');
   if (!meta) throw new SaveError('CORRUPT', 'missing meta section');
   if (entities === null) repairs.push('no entity section (pre-T-202 save): buildings restore empty');
-  return { header, layers, meta, entities, repairs };
+  const resolvedPolicy = resolvePolicy(version, policy, repairs);
+  return { header, layers, meta, entities, policy: resolvedPolicy, repairs };
 }
 
 function parseLayers(payload: Uint8Array): SaveLayers {

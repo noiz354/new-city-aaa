@@ -169,3 +169,11 @@
 .spark .bar-inc { fill: #3fbf6f; } .spark .bar-exp { fill: #d95a4a; }
 .spark text { fill: #9aa; font-size: 10px; }
 .budget-note { font-size: 11px; margin: 8px 0 0; }
+
+/* T-302: tax-rate sliders inside the budget panel */
+.tax-sliders { border: 1px solid var(--line, #333); border-radius: 6px; margin: 4px 0 4px; padding: 6px 10px; }
+.tax-sliders legend { font-size: 11px; color: #8b949e; padding: 0 4px; }
+.tax-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.tax-row label { width: 88px; }
+.tax-row input[type="range"] { flex: 1; accent-color: #1f6feb; }
+.tax-value { width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: #e6edf3; }
