@@ -21,6 +21,7 @@ import { applyBulldoze, applyRoad, applyZone, validateBulldoze, validateRoad, va
 import { Economy } from './economy.js';
 import { Growth } from './growth.js';
 import { RoadAccess } from './road-access.js';
+import { RoadGraph } from './roadGraph.js';
 import { Rng } from './rng.js';
 import { CHUNK } from '../shared/types.js';
 import { Upkeep } from './upkeep.js';
@@ -42,6 +43,7 @@ export class Sim {
   readonly growth: Growth; // T-202: daily scoring → spawn + move-in
   readonly roadAccess: RoadAccess; // T-204: canonical attachment flags (derived truth)
   readonly cohort: Cohort; // T-305: residents/jobs/gravity match/unemployment/happiness
+  readonly roadGraph: RoadGraph; // T-401: node/edge road graph (derived; traffic A* + power seam)
   readonly upkeep: Upkeep; // T-205: monthly per-building/road upkeep (economy stage)
   readonly demand: Demand; // T-206: FR-S02 RCI demand, recomputed daily (derived)
   readonly fields: Fields; // T-207: land value + landFit (fields stage, derived)
@@ -54,6 +56,8 @@ export class Sim {
     this.rng = new Rng(this.world.seed ^ 0x51ed2709);
     this.buildings = new Buildings(this.world);
     this.roadAccess = new RoadAccess(this.world);
+    this.roadGraph = new RoadGraph(this.world); // derived; built eagerly from the (empty) road layer
+    this.roadGraph.rebuildAll();
     this.cohort = new Cohort(this.world, this.buildings);
     this.demand = new Demand(this.world, this.buildings, { cohort: this.cohort, getTax: () => this.economy.tax });
     this.fields = new Fields(this.world, this.buildings);
@@ -112,6 +116,7 @@ export class Sim {
           if (t.y < y0) y0 = t.y; if (t.y > y1) y1 = t.y;
         }
         if (x1 >= x0) this.roadAccess.noteRect({ x0, y0, x1, y1 }); // attachment may change around new road
+        if (x1 >= x0) { this.roadGraph.noteRect({ x0, y0, x1, y1 }); this.roadGraph.flush(); } // T-401 structural rebuild
         this.emitChunksFor(cmd.path);
       }
     } else if (cmd.kind === 'paint-zone') {
@@ -133,6 +138,7 @@ export class Sim {
         this.economy.spend(v.cost);
         res = { ok: true, cost: v.cost, tiles: applied };
         this.roadAccess.noteRect(cmd.rect); // road loss may de-attach neighbours ±2
+        this.roadGraph.noteRect(cmd.rect); this.roadGraph.flush(); // T-401: road loss rebuilds affected components
         this.emitChunksForRect(cmd.rect);
       }
     }
@@ -246,6 +252,7 @@ export class Sim {
     if (entities !== undefined) this.buildings.deserialize(entities);
     else this.buildings.reset(); // pre-T-202 saves carry no entity section → restore empty (repair note)
     this.roadAccess.recomputeForLoad(this.buildings); // derived flags follow the restored layers silently
+    this.roadGraph.rebuildAll(); // T-401: graph is derived; rebuilt canonically from restored road layer
     this.fields.invalidateStatic(); // restored terrain bytes → rebuild static base
     this.fields.recompute(); // land value is derived; rebuilt from restored world+buildings
     const speed = meta.speed === 0 || meta.speed === 1 || meta.speed === 2 || meta.speed === 3 ? meta.speed : 1;

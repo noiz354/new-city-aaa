@@ -29,6 +29,8 @@
 > Memerlukan 2 koreksi engine (budget growth N sesuai docs §3; plafon employment cohort `matched=W` saat J≥W).
 > Band terkalibrasi: pop 4136 ∈[3k,8k], treasury>0 tiap bulan, u 0–12%, happiness 55–85. S-sprawl/S-crisis tetap
 > ditunda (traffic/power = slice berikutnya). Suite **156/156**.
+> Update 2026-09-20 #4: **T-401 `[x]`** — road graph builder (`sim/roadGraph.ts`), fondasi A* (T-402) & power
+> flood (T-405). Node/edge + component-scoped incremental rebuild. Suite **165/165**.
 
 ## VS-0 — Foundation (T-1xx)
 
@@ -253,8 +255,19 @@
 
 ## VS-4 — Traffic & Utilities (T-4xx)
 
-- [ ] **T-401 M — Road graph builder.** Node/edge dari road tile, rebuild incremental; unit test T-junction + loop.
+- [x] **T-401 M — Road graph builder.** Node/edge dari road tile, rebuild incremental; unit test T-junction + loop.
   `Deps: VS-3 GATE` · `Accept: graph cocok fixture.` · `Evidence: vitest log.` · `Skills: tdd, city-builder-simulation-audit`
+  - **Status: DONE 2026-09-20 (dibangun lebih awal — infrastruktur murni, tidak depend fungsional ke gate).**
+    `src/sim/roadGraph.ts`: node = road tile dengan 4-neighbour count ≠ 2 (endpoint/stub/junction); pure ring →
+    pseudo-node self-loop fixture. Edge = run count-2 maksimal dengan `{lengthM, lanes:2, speedKph:40, capacity:1600,
+    volume:0}` (§3/§6; kapasitas final milik balancing). Rebuild **component-scoped incremental** (komponen jalan
+    koneksi-4 yang menyentuh region diedit dibangun ulang utuh — merge/split tertangani, komponen lain dipakai ulang);
+    `graphVersion` monotonic (kunci invalidasi cache path T-402). Wiring `sim.ts`: rebuildAll konstruktor/loadState,
+    noteRect+flush pada place-road & bulldoze. Derived (tak dipersist). Attachment live tetap `RoadAccess.isConnected`
+    ≤2 (seam graph disediakan via `nearestNodeWithin` untuk konsumen T-402).
+  - **Evidence: vitest — `roadGraph.test.ts` 9 test** (straight/T-junction/loop/disconnected fixture exact;
+    flush vs rebuildAll struktural-equal; merge pada tambah konektor; split pada bulldoze tengah; version monotonic;
+    determinisme). Suite **165/165**.
 - [ ] **T-402 L — A* + cache + worker.** Binary-heap A*, bobot BPR, cache O-D, offload worker; harness `npm run perf`.
   `Deps: T-401` · `Accept: 500 path <100ms; deterministik seed sama.` · `Evidence: perf log.` · `Skills: tdd, city-builder-simulation-audit`
 - [ ] **T-403 M — Traffic assignment + viz.** Volume → v/c → warna LOS + alert congestion.
