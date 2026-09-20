@@ -18,6 +18,8 @@ export interface UiState {
   storageDriver: string;
   /** T-207: land-value gradient overlay visible? (toggles via TopBar / V key) */
   valueOverlay: boolean;
+  /** T-405: power-grid overlay visible? (toggles via TopBar / P key) */
+  powerOverlay: boolean;
   /** T-303: budget panel open (breakdown + 12-month sparkline). */
   budgetOpen: boolean;
 }
@@ -41,6 +43,7 @@ export class UiStore {
       projection: 'ortho',
       storageDriver: '?',
       valueOverlay: false,
+      powerOverlay: false,
       budgetOpen: false,
     };
   }

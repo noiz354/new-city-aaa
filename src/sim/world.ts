@@ -36,6 +36,8 @@ export interface WorldCounts {
   zonesR: number;
   zonesC: number;
   zonesI: number;
+  /** T-405: dedicated power-line tiles (cross-country conductors; roads conduct for free). */
+  lines: number;
 }
 
 /** Deterministic 2D lattice hash -> [0, 1). */
@@ -75,9 +77,11 @@ export class World {
   zone: Uint8Array;
   road: Uint8Array;
   roadMask: Uint8Array;
+  /** T-405: player-laid power lines (persisted layer; conduct power, no other effect). */
+  powerLine: Uint8Array;
   building: Int32Array; // tile → buildingId (-1=none); written EXCLUSIVELY by sim/buildings.ts (T-201)
   chunkDirty: Uint8Array;
-  counts: WorldCounts = { roads: 0, zonesR: 0, zonesC: 0, zonesI: 0 };
+  counts: WorldCounts = { roads: 0, zonesR: 0, zonesC: 0, zonesI: 0, lines: 0 };
 
   constructor(opts: WorldOptions = {}) {
     this.size = opts.size ?? 256;
@@ -90,6 +94,7 @@ export class World {
     this.zone = new Uint8Array(n);
     this.road = new Uint8Array(n);
     this.roadMask = new Uint8Array(n);
+    this.powerLine = new Uint8Array(n);
     this.building = new Int32Array(n).fill(-1);
     const nc = this.size / CHUNK;
     this.chunkDirty = new Uint8Array(nc * nc).fill(DIRTY_ALL);
@@ -229,8 +234,7 @@ export class World {
     return true;
   }
 
-  setZone(x: number, y: number, z: 1 | 2 | 3): boolean {
-    if (!this.inBounds(x, y)) return false;
+  setZone(x: number, y: number, z: 1 | 2 | 3): boolean {    if (!this.inBounds(x, y)) return false;
     const i = this.idx(x, y);
     if ((this.road[i] as number) === 1) return false;
     const prev = this.zone[i] as number;
@@ -238,6 +242,18 @@ export class World {
     if (prev !== 0) this.bumpZoneCount(prev as ZoneId, -1);
     this.zone[i] = z;
     this.bumpZoneCount(z, 1);
+    this.markDirty(x, y, DIRTY_ZONES);
+    return true;
+  }
+
+  /** T-405: remove zone paint without billing (plant placement clears its lot like roads do). */
+  clearZone(x: number, y: number): boolean {
+    if (!this.inBounds(x, y)) return false;
+    const i = this.idx(x, y);
+    const prev = this.zone[i] as number;
+    if (prev === 0) return false;
+    this.bumpZoneCount(prev as ZoneId, -1);
+    this.zone[i] = 0;
     this.markDirty(x, y, DIRTY_ZONES);
     return true;
   }
@@ -256,7 +272,30 @@ export class World {
       this.markDirty(x, y, DIRTY_ZONES);
       return 'zone';
     }
+    // T-405: power lines clear free (unbilled) alongside whatever else was here.
+    if ((this.powerLine[i] as number) === 1) this.clearPowerLine(x, y);
     return 'none';
+  }
+
+  /** T-405: lay a power-line conductor (independent layer — coexists with road/zone). */
+  setPowerLine(x: number, y: number): boolean {
+    if (!this.inBounds(x, y)) return false;
+    const i = this.idx(x, y);
+    if ((this.powerLine[i] as number) === 1) return true;
+    this.powerLine[i] = 1;
+    this.counts.lines++;
+    this.markDirty(x, y, DIRTY_ZONES); // no dedicated flag: lines ride the zone refresh
+    return true;
+  }
+
+  clearPowerLine(x: number, y: number): boolean {
+    if (!this.inBounds(x, y)) return false;
+    const i = this.idx(x, y);
+    if ((this.powerLine[i] as number) === 0) return false;
+    this.powerLine[i] = 0;
+    this.counts.lines--;
+    this.markDirty(x, y, DIRTY_ZONES);
+    return true;
   }
 
   private bumpZoneCount(z: ZoneId, delta: number): void {
@@ -295,6 +334,7 @@ export class World {
       height: new Uint8Array(this.height.buffer.slice(0)),
       zone: this.zone.slice(),
       road: this.road.slice(),
+      powerLine: this.powerLine.slice(),
     };
   }
 
@@ -305,16 +345,19 @@ export class World {
     assert(layers.height.length === n * 4, 'height layer size mismatch');
     assert(layers.zone.length === n, 'zone layer size mismatch');
     assert(layers.road.length === n, 'road layer size mismatch');
+    assert(layers.powerLine.length === n, 'power-line layer size mismatch');
     this.terrain.set(layers.terrain);
     this.height.set(new Float32Array(layers.height.buffer.slice(0)));
     this.zone.set(layers.zone);
     this.road.set(layers.road);
+    this.powerLine.set(layers.powerLine);
     // rebuild derived state (masks + counts) rather than trusting them
-    this.counts = { roads: 0, zonesR: 0, zonesC: 0, zonesI: 0 };
+    this.counts = { roads: 0, zonesR: 0, zonesC: 0, zonesI: 0, lines: 0 };
     for (let y = 0; y < this.size; y++) {
       for (let x = 0; x < this.size; x++) {
         const i = this.idx(x, y);
         if ((this.road[i] as number) === 1) this.counts.roads++;
+        if ((this.powerLine[i] as number) === 1) this.counts.lines++;
         const z = this.zone[i] as number;
         if (z >= 1 && z <= 3) this.bumpZoneCount(z as ZoneId, 1);
         else this.zone[i] = 0;
@@ -327,6 +370,6 @@ export class World {
 
   /** Canonical byte views for hashing (order fixed; excludes derived masks). */
   hashParts(): Uint8Array[] {
-    return [this.terrain, new Uint8Array(this.height.buffer), this.zone, this.road];
+    return [this.terrain, new Uint8Array(this.height.buffer), this.zone, this.road, this.powerLine];
   }
 }

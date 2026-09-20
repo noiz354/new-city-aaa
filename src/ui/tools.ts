@@ -18,6 +18,8 @@ const TOOL_KEYS: Record<string, ToolId> = {
   Digit4: 'zone-c',
   Digit5: 'zone-i',
   Digit6: 'bulldoze',
+  Digit7: 'power-line',
+  Digit8: 'plant',
 };
 
 function money(n: number): string {
@@ -33,7 +35,7 @@ export class ToolController {
     private readonly view: View,
     private readonly store: UiStore,
     private readonly host: CommandHost,
-    private readonly actions: Pick<UiActions, 'setTool' | 'togglePause' | 'toggleCamera' | 'toggleValueOverlay' | 'toggleBudget'>,
+    private readonly actions: Pick<UiActions, 'setTool' | 'togglePause' | 'toggleCamera' | 'toggleValueOverlay' | 'togglePowerOverlay' | 'toggleBudget'>,
   ) {
     canvas.addEventListener('pointerdown', (e) => this.onDown(e));
     window.addEventListener('pointermove', (e) => this.onMove(e));
@@ -102,6 +104,8 @@ export class ToolController {
     if (res.ok) {
       if (cmd.kind === 'place-road') this.store.toast(`Road built · ${money(res.cost)}`);
       else if (cmd.kind === 'paint-zone') this.store.toast(`Zoned ${res.tiles} tiles · ${money(res.cost)}`);
+      else if (cmd.kind === 'place-power-line') this.store.toast(`Power line · ${money(res.cost)}`);
+      else if (cmd.kind === 'place-plant') this.store.toast(`Power plant online · ${money(res.cost)}`);
       else this.store.toast(res.tiles > 0 ? `Cleared ${res.tiles} tiles · ${money(res.cost)}` : 'Nothing to clear');
     } else {
       this.store.toast(res.shortBy ? `${res.reason} (${money(res.shortBy)} short)` : res.reason);
@@ -122,6 +126,8 @@ export class ToolController {
       this.actions.toggleCamera();
     } else if (e.code === 'KeyV') {
       this.actions.toggleValueOverlay(); // T-207: land-value gradient overlay
+    } else if (e.code === 'KeyP') {
+      this.actions.togglePowerOverlay(); // T-405: power-grid overlay
     } else if (e.code === 'KeyB') {
       this.actions.toggleBudget(); // T-303: budget panel
     } else if (e.code === 'Escape') {
@@ -144,6 +150,8 @@ export class ToolController {
     if (drag.tool === 'zone-r') return { kind: 'paint-zone', rect: normalizeRect(drag.anchor, tile), zone: 1 };
     if (drag.tool === 'zone-c') return { kind: 'paint-zone', rect: normalizeRect(drag.anchor, tile), zone: 2 };
     if (drag.tool === 'zone-i') return { kind: 'paint-zone', rect: normalizeRect(drag.anchor, tile), zone: 3 };
+    if (drag.tool === 'power-line') return { kind: 'place-power-line', path: planRoadPath(drag.anchor, tile) };
+    if (drag.tool === 'plant') return { kind: 'place-plant', x: tile.x, y: tile.y };
     return null;
   }
 
@@ -185,6 +193,23 @@ export class ToolController {
               previewCost: v.cost,
               previewNote: v.tiles > 0 ? `${money(v.cost)} · ${v.tiles} tiles` : 'Nothing to clear',
             }
+          : { previewCost: null, previewNote: v.reason },
+      );
+    } else if (drag.tool === 'plant') {
+      const v = this.host.validatePlant(cur.x, cur.y);
+      this.view.ghost.setTiles(this.toGhostTiles([cur], v.ok ? 'ok' : 'err'));
+      this.store.set(
+        v.ok
+          ? { previewCost: v.cost, previewNote: `${money(v.cost)} · 60 MW plant` }
+          : { previewCost: null, previewNote: v.reason },
+      );
+    } else if (drag.tool === 'power-line') {
+      const path = planRoadPath(drag.anchor, cur);
+      const v = this.host.validatePowerLine(path);
+      this.view.ghost.setTiles(this.toGhostTiles(path, v.ok ? 'ok' : 'err'));
+      this.store.set(
+        v.ok
+          ? { previewCost: v.cost, previewNote: `${money(v.cost)} · ${v.tiles} tiles` }
           : { previewCost: null, previewNote: v.reason },
       );
     } else {

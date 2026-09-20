@@ -10,11 +10,21 @@ import type {
   ZonePlan,
 } from '../shared/types.js';
 import { COSTS } from './tuning/costs.js';
+import { COSTS_POWER } from './tuning/power.js';
 import type { Economy } from './economy.js';
 import type { World } from './world.js';
 
+/** Plant-tile probe (plants live in sim.PowerGrid, not the world). Defaults to "no plants". */
+export type IsPlantTile = (x: number, y: number) => boolean;
+const noPlants: IsPlantTile = () => false;
+
 /** Validate a road path. Existing road tiles are free; any blocked tile rejects all. */
-export function validateRoad(world: World, economy: Economy, path: TilePos[]): CommandResult & { plan?: RoadPlan } {
+export function validateRoad(
+  world: World,
+  economy: Economy,
+  path: TilePos[],
+  isPlantTile: IsPlantTile = noPlants,
+): CommandResult & { plan?: RoadPlan } {
   if (path.length === 0) return { ok: false, reason: 'Empty path' };
   const seen = new Set<number>();
   const newTiles: TilePos[] = [];
@@ -24,6 +34,7 @@ export function validateRoad(world: World, economy: Economy, path: TilePos[]): C
     seen.add(key);
     if (!world.inBounds(t.x, t.y)) return { ok: false, reason: 'Out of bounds' };
     if ((world.road[world.idx(t.x, t.y)] as number) === 1) continue; // re-lay is free
+    if (isPlantTile(t.x, t.y)) return { ok: false, reason: 'Power plant here' };
     const blocked = world.buildBlockReason(t.x, t.y);
     if (blocked) return { ok: false, reason: blocked };
     newTiles.push(t);
@@ -48,6 +59,7 @@ export function validateZone(
   world: World,
   economy: Economy,
   rect: TileRect,
+  isPlantTile: IsPlantTile = noPlants,
 ): CommandResult & { plan?: ZonePlan } {
   const tiles: TilePos[] = [];
   let skipped = 0;
@@ -62,6 +74,7 @@ export function validateZone(
       if (
         (world.road[i] as number) === 1 ||
         (world.building[i] as number) !== -1 ||
+        isPlantTile(x, y) ||
         world.buildBlockReason(x, y) !== null
       ) {
         skipped++;
@@ -108,4 +121,74 @@ export function applyBulldoze(world: World, plan: BulldozePlan): number {
     if (world.clearTile(t.x, t.y) !== 'none') cleared++;
   }
   return cleared;
+}
+
+/**
+ * Validate a power-line path (T-405). Reuses the RoadPlan shape ({path, newTiles, cost}) —
+ * a line drag behaves exactly like a road drag, minus terrain carving. Already-lined tiles
+ * are free; lines coexist with roads/zones but not with buildings or plants.
+ */
+export function validatePowerLine(
+  world: World,
+  economy: Economy,
+  path: TilePos[],
+  isPlantTile: IsPlantTile = noPlants,
+): CommandResult & { plan?: RoadPlan } {
+  if (path.length === 0) return { ok: false, reason: 'Empty path' };
+  const seen = new Set<number>();
+  const newTiles: TilePos[] = [];
+  for (const t of path) {
+    const key = t.y * world.size + t.x;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (!world.inBounds(t.x, t.y)) return { ok: false, reason: 'Out of bounds' };
+    if ((world.powerLine[world.idx(t.x, t.y)] as number) === 1) continue; // re-lay is free
+    if (isPlantTile(t.x, t.y)) return { ok: false, reason: 'Power plant here' };
+    if ((world.building[world.idx(t.x, t.y)] as number) !== -1) {
+      return { ok: false, reason: 'Occupied by building' };
+    }
+    const blocked = world.buildBlockReason(t.x, t.y);
+    if (blocked) return { ok: false, reason: blocked };
+    newTiles.push(t);
+  }
+  const cost = newTiles.length * COSTS_POWER.linePerTile;
+  if (!economy.canAfford(cost)) {
+    return { ok: false, reason: 'Insufficient funds', shortBy: cost - economy.balance };
+  }
+  return { ok: true, cost, tiles: newTiles.length, plan: { path, newTiles, cost } };
+}
+
+export function applyPowerLine(world: World, plan: RoadPlan): number {
+  let applied = 0;
+  for (const t of plan.newTiles) {
+    if (world.setPowerLine(t.x, t.y)) applied++;
+  }
+  return applied;
+}
+
+/**
+ * Validate a power-plant site (T-405). Single buildable tile: no road/building/line/plant,
+ * no water/steep. Zone paint is cleared on apply (like roads do); buildings are demolished
+ * by Sim.execute first, so a plant may replace an occupied lot at full flat cost.
+ */
+export function validatePlant(
+  world: World,
+  economy: Economy,
+  x: number,
+  y: number,
+  isPlantTile: IsPlantTile = noPlants,
+): CommandResult {
+  if (!world.inBounds(x, y)) return { ok: false, reason: 'Out of bounds' };
+  const i = world.idx(x, y);
+  if (isPlantTile(x, y)) return { ok: false, reason: 'Power plant here' };
+  if ((world.road[i] as number) === 1) return { ok: false, reason: 'Road here' };
+  if ((world.building[i] as number) !== -1) return { ok: false, reason: 'Occupied by building' };
+  if ((world.powerLine[i] as number) === 1) return { ok: false, reason: 'Power line here' };
+  const blocked = world.buildBlockReason(x, y);
+  if (blocked) return { ok: false, reason: blocked };
+  const cost = COSTS_POWER.plant;
+  if (!economy.canAfford(cost)) {
+    return { ok: false, reason: 'Insufficient funds', shortBy: cost - economy.balance };
+  }
+  return { ok: true, cost, tiles: 1 };
 }

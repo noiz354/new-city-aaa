@@ -6,18 +6,22 @@
 // saves predating section 4 restore with empty buildings (repair note) — no version bump
 // needed while every section stays independently skippable.
 import { gunzipSync, gzipSync } from 'fflate';
-import type { SaveEntities, SaveLayers, SaveMeta, SavePolicy, SaveSource } from '../shared/types.js';
+import type { SaveEntities, SaveLayers, SaveMeta, SavePolicy, SavePower, SaveSource } from '../shared/types.js';
 import { crc32Bytes } from '../shared/crc32.js';
 
 export const SAVE_MAGIC = 'CB1S';
 // Bumped 1 -> 2 for T-302 (spec §9 ask-first): v2 adds the policy section (per-zone tax rates).
 // Legacy v1 saves carry no policy section and are migrated to the default 9/9/9 on load (repair note).
-export const SAVE_VERSION = 2;
+// Bumped 2 -> 3 for T-405 (spec §9 ask-first): v3 adds the power-line layer (layers sver 1 -> 2)
+// plus the power section (plant sites). Pre-v3 saves load with an empty grid → inactive →
+// self-powered, so old cities keep growing (legacy-guard, repair note).
+export const SAVE_VERSION = 3;
 export const SECTION_HEADER = 1;
 export const SECTION_LAYERS = 2;
 export const SECTION_META = 3;
 export const SECTION_ENTITIES = 4;
 export const SECTION_POLICY = 5;
+export const SECTION_POWER = 6;
 
 /** Valid tax-rate range (docs/02 §4, T-302). Clamped on both encode and decode for safety. */
 export const POLICY_TAX_MIN = 0;
@@ -53,6 +57,8 @@ export interface DecodedSave {
   entities: SaveEntities | null;
   /** Resolved policy; always non-null (defaults applied for pre-v2 / malformed saves). */
   policy: SavePolicy;
+  /** Resolved power; always non-null (empty grid for pre-v3 / malformed saves). */
+  power: SavePower;
   repairs: string[];
 }
 
@@ -200,14 +206,17 @@ export function encodeSave(sim: SaveSource): Uint8Array {
   const layers = sim.getSaveLayers();
   const n = snap.size * snap.size;
 
-  const lh = new Uint8Array(2 + 4 * 4);
+  // Layers sver 2 (v3 save-format): five u32 lengths + power-line bytes. Pre-v3 decoders
+  // reject the version bump before reaching here, so no backward-parse concern.
+  const lh = new Uint8Array(2 + 5 * 4);
   const ldv = new DataView(lh.buffer);
   ldv.setUint16(0, snap.size, true);
   ldv.setUint32(2, n, true);
   ldv.setUint32(6, n * 4, true);
   ldv.setUint32(10, n, true);
   ldv.setUint32(14, n, true);
-  const layersPayload = concat([lh, layers.terrain, layers.height, layers.zone, layers.road]);
+  ldv.setUint32(18, n, true);
+  const layersPayload = concat([lh, layers.terrain, layers.height, layers.zone, layers.road, layers.powerLine]);
 
   const inner = concat([
     textEncoder.encode(SAVE_MAGIC),
@@ -215,14 +224,15 @@ export function encodeSave(sim: SaveSource): Uint8Array {
       const h = new Uint8Array(4);
       const dv = new DataView(h.buffer);
       dv.setUint16(0, SAVE_VERSION, true);
-      dv.setUint16(2, 5, true);
+      dv.setUint16(2, 6, true);
       return h;
     })(),
     writeSection(SECTION_HEADER, 1, textEncoder.encode(JSON.stringify(header))),
-    writeSection(SECTION_LAYERS, 1, layersPayload),
+    writeSection(SECTION_LAYERS, 2, layersPayload),
     writeSection(SECTION_META, 1, textEncoder.encode(JSON.stringify(meta))),
     writeSection(SECTION_ENTITIES, 1, encodeEntities(sim.getSaveEntities())),
     writeSection(SECTION_POLICY, 1, encodePolicy(sim.getSavePolicy())),
+    writeSection(SECTION_POWER, 1, encodePower(sim.getSavePower())),
   ]);
   return gzipSync(inner, { level: 6 });
 }
@@ -252,10 +262,12 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
   let meta: SaveMeta | null = null;
   let entities: SaveEntities | null = null;
   let policy: SavePolicy | null = null;
+  let power: SavePower | null = null;
   let off = 8;
   for (let s = 0; s < sectionCount; s++) {
     if (off + 7 > inner.length) throw new SaveError('CORRUPT', `section ${s}: truncated header`);
     const id = inner[off] as number;
+    const sver = dv.getUint16(off + 1, true);
     const len = dv.getUint32(off + 3, true);
     const payloadStart = off + 7;
     const payloadEnd = payloadStart + len;
@@ -267,13 +279,15 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
     if (id === SECTION_HEADER) {
       header = JSON.parse(textDecoder.decode(payload)) as SaveHeader;
     } else if (id === SECTION_LAYERS) {
-      layers = parseLayers(payload);
+      layers = parseLayers(payload, sver);
     } else if (id === SECTION_META) {
       meta = JSON.parse(textDecoder.decode(payload)) as SaveMeta;
     } else if (id === SECTION_ENTITIES) {
       entities = parseEntities(payload);
     } else if (id === SECTION_POLICY) {
       policy = parsePolicy(payload);
+    } else if (id === SECTION_POWER) {
+      power = parsePower(payload);
     } else {
       repairs.push(`skipped unknown section id ${id} (forward compatibility)`);
     }
@@ -284,10 +298,11 @@ export function decodeSave(bytes: Uint8Array): DecodedSave {
   if (!meta) throw new SaveError('CORRUPT', 'missing meta section');
   if (entities === null) repairs.push('no entity section (pre-T-202 save): buildings restore empty');
   const resolvedPolicy = resolvePolicy(version, policy, repairs);
-  return { header, layers, meta, entities, policy: resolvedPolicy, repairs };
+  const resolvedPower = resolvePower(version, power, repairs);
+  return { header, layers, meta, entities, policy: resolvedPolicy, power: resolvedPower, repairs };
 }
 
-function parseLayers(payload: Uint8Array): SaveLayers {
+function parseLayers(payload: Uint8Array, sver: number): SaveLayers {
   if (payload.length < 18) throw new SaveError('CORRUPT', 'layers payload too short');
   const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
   const size = dv.getUint16(0, true);
@@ -297,12 +312,75 @@ function parseLayers(payload: Uint8Array): SaveLayers {
   if (lens[0] !== n || lens[1] !== n * 4 || lens[2] !== n || lens[3] !== n) {
     throw new SaveError('CORRUPT', 'layers length table mismatch');
   }
+  // Svers: v3 appends a 5th length + the power-line layer (header grows 18 → 22 bytes).
   let off = 18;
+  if (sver >= 2) {
+    if (payload.length < 22) throw new SaveError('CORRUPT', 'layers payload too short');
+    if (dv.getUint32(18, true) !== n) throw new SaveError('CORRUPT', 'layers length table mismatch');
+    off = 22;
+  }
   const take = (len: number): Uint8Array => {
     if (off + len > payload.length) throw new SaveError('CORRUPT', 'layers payload truncated');
     const slice = payload.slice(off, off + len);
     off += len;
     return slice;
   };
-  return { terrain: take(n), height: take(n * 4), zone: take(n), road: take(n) };
+  const terrain = take(n);
+  const height = take(n * 4);
+  const zone = take(n);
+  const road = take(n);
+  // Layers sver 2 (v3 save-format) appends the power-line layer; sver 1 payloads end here and
+  // restore with an empty line layer (legacy-guard: pre-v3 grids are plant-less too, so the
+  // grid stays inactive and old cities run self-powered).
+  let powerLine: Uint8Array;
+  if (sver >= 2) {
+    powerLine = take(n);
+  } else {
+    powerLine = new Uint8Array(n);
+  }
+  return { terrain, height, zone, road, powerLine };
+}
+
+/** Power payload (section 6, sver 1): u32 plantCount; per plant u16 x, u16 y. */
+function encodePower(power: SavePower): Uint8Array {
+  const payload = new Uint8Array(4 + power.plants.length * 4);
+  const dv = new DataView(payload.buffer);
+  dv.setUint32(0, power.plants.length, true);
+  let o = 4;
+  for (const p of power.plants) {
+    dv.setUint16(o, p.x, true);
+    dv.setUint16(o + 2, p.y, true);
+    o += 4;
+  }
+  return payload;
+}
+
+function parsePower(payload: Uint8Array): SavePower {
+  if (payload.length < 4) throw new SaveError('CORRUPT', 'power payload too short');
+  const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  const count = dv.getUint32(0, true);
+  if (count > (1 << 20)) throw new SaveError('CORRUPT', `implausible plant count ${count}`);
+  if (payload.length < 4 + count * 4) throw new SaveError('CORRUPT', 'power payload truncated');
+  const plants: SavePower['plants'] = [];
+  let o = 4;
+  for (let k = 0; k < count; k++) {
+    plants.push({ x: dv.getUint16(o, true), y: dv.getUint16(o + 2, true) });
+    o += 4;
+  }
+  return { plants };
+}
+
+/**
+ * Migration step: plants + power lines landed at save-version 3. Pre-v3 saves have neither;
+ * the grid resolves empty → inactive → self-powered (spec §9 legacy-guard: no format touch
+ * may strand an old city in the dark). A v3 save missing the section is repaired the same way.
+ */
+function resolvePower(version: number, parsed: SavePower | null, repairs: string[]): SavePower {
+  if (parsed) return parsed;
+  repairs.push(
+    version < 3
+      ? 'pre-v3 save (no power section): grid inactive, buildings self-powered'
+      : 'missing power section: grid inactive, buildings self-powered',
+  );
+  return { plants: [] };
 }

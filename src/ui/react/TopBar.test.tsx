@@ -25,6 +25,7 @@ function snap(over: Partial<SimSnapshot>): SimSnapshot {
       paused: false,
       speed: 1,
       counts: { roads: 0, zonesR: 0, zonesC: 0, zonesI: 0 },
+      power: { active: false, plants: 0, nets: 0, supplyMw: 0, demandMw: 0, unpowered: 0 },
       ...over,
     };
 }
@@ -38,6 +39,7 @@ describe('T-208 FR-U02 — HUD pop/jobs/unemployment follow city growth', () => 
         driver="webgl2"
         actions={actions}
         valueOverlay={false}
+        powerOverlay={false}
       />,
     );
     // 4 Hz cadence is the 250 ms snapshot pump in main; this strip is always visible.

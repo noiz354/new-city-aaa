@@ -12,12 +12,14 @@ export function TopBar({
   driver,
   actions,
   valueOverlay,
+  powerOverlay,
 }: {
   snapshot: SimSnapshot;
   projection: 'ortho' | 'persp';
   driver: string;
   actions: UiActions;
   valueOverlay: boolean;
+  powerOverlay: boolean;
 }): JSX.Element {
   const d = snapshot.date;
   const speeds: { label: string; value: 0 | 1 | 2 | 3 }[] = [
@@ -75,6 +77,14 @@ export function TopBar({
         title="Land value overlay (V)"
       >
         Value
+      </button>
+      {/* T-405: power-grid overlay (nets + unpowered lots) */}
+      <button
+        className={powerOverlay ? 'on' : ''}
+        onClick={() => actions.togglePowerOverlay()}
+        title="Power grid overlay (P)"
+      >
+        Power
       </button>
       <span className="stat dim" title="Save storage driver">
         {driver}

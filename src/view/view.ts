@@ -7,6 +7,7 @@ import { CameraRig } from './cameras.js';
 import { FpsOverlay } from './f3.js';
 import { BlockedIconLayer } from './icons.js';
 import { LandValueOverlay, type FieldsView } from './landvalue.js';
+import { PlantLayer, PowerLineLayer, PowerOverlay, type PowerView, UnpoweredIconLayer } from './power.js';
 import { GhostLayer, HoverMarker } from './highlight.js';
 import { Picker, type PickResult } from './picking.js';
 import { RoadLayer } from './roads.js';
@@ -27,6 +28,11 @@ export class View {
   private terrain: THREE.Mesh;
   private buildings: BuildingLayer;
   private icons: BlockedIconLayer;
+  private powerIcons: UnpoweredIconLayer; // T-405: amber ⚡ markers for unpowered lots
+  private plants: PlantLayer; // T-405: coal-plant markers
+  private powerLines: PowerLineLayer; // T-405: pylon markers on power-line tiles
+  private powerOv: PowerOverlay; // T-405: net tint overlay (hidden by default)
+  private power: PowerView | null = null;
   private landValueOv: LandValueOverlay;
   private fields: FieldsView | null = null;
   private readonly f3: FpsOverlay;
@@ -50,6 +56,15 @@ export class View {
     this.sceneMgr.scene.add(this.buildings.group);
     this.icons = new BlockedIconLayer(world);
     this.sceneMgr.scene.add(this.icons.group);
+    this.powerIcons = new UnpoweredIconLayer(world);
+    this.sceneMgr.scene.add(this.powerIcons.group);
+    this.plants = new PlantLayer(world);
+    this.sceneMgr.scene.add(this.plants.group);
+    this.powerLines = new PowerLineLayer(world);
+    this.powerLines.resync(world);
+    this.sceneMgr.scene.add(this.powerLines.group);
+    this.powerOv = new PowerOverlay(world);
+    this.sceneMgr.scene.add(this.powerOv.mesh);
     this.landValueOv = new LandValueOverlay(world);
     this.sceneMgr.scene.add(this.landValueOv.mesh);
     this.sceneMgr.scene.add(this.hover.group);
@@ -86,6 +101,23 @@ export class View {
     this.icons.dispose();
     this.icons = new BlockedIconLayer(world);
     this.sceneMgr.scene.add(this.icons.group);
+    this.powerIcons.dispose();
+    this.powerIcons = new UnpoweredIconLayer(world);
+    this.sceneMgr.scene.add(this.powerIcons.group);
+    this.plants.dispose();
+    this.plants = new PlantLayer(world);
+    this.sceneMgr.scene.add(this.plants.group);
+    this.powerLines.dispose();
+    this.powerLines = new PowerLineLayer(world);
+    this.powerLines.resync(world);
+    this.sceneMgr.scene.add(this.powerLines.group);
+    this.powerOv.dispose();
+    this.powerOv = new PowerOverlay(world);
+    this.sceneMgr.scene.add(this.powerOv.mesh);
+    if (this.power !== null) {
+      this.powerOv.update(world, this.power);
+      this.powerOv.setVisible(true); // preserve on-state across the load rebuild
+    }
     this.landValueOv.dispose();
     this.landValueOv = new LandValueOverlay(world);
     this.sceneMgr.scene.add(this.landValueOv.mesh);
@@ -101,6 +133,9 @@ export class View {
     for (const e of events) {
       if (e.type === 'building-changed') this.buildings.apply(e);
       else if (e.type === 'road-access-changed') this.icons.apply(e); // T-204 FR-C06
+      else if (e.type === 'power-changed') this.powerIcons.apply(e); // T-405
+      else if (e.type === 'plant-changed') this.plants.apply(e.x, e.y, e.present); // T-405
+      else if (e.type === 'power-line-changed') this.powerLines.resync(this.world); // T-405
     }
   }
 
@@ -112,6 +147,26 @@ export class View {
   /** Rebuild blocked-attachment markers wholesale (boot + post-load full sync). */
   syncIcons(blocked: TilePos[]): void {
     this.icons.sync(blocked);
+  }
+
+  /** Rebuild power markers wholesale (boot + post-load full sync). */
+  syncPower(unpowered: TilePos[]): void {
+    this.powerIcons.sync(unpowered);
+    if (this.power !== null) this.plants.sync(PowerLineLayer.plantTiles(this.world, this.power));
+    this.powerLines.resync(this.world);
+  }
+
+  /** T-405: bind the sim PowerGrid (grid truth) and refresh the overlay tint. */
+  attachPower(power: PowerView, visible: boolean): void {
+    this.power = power;
+    this.plants.sync(PowerLineLayer.plantTiles(this.world, power));
+    this.powerOv.update(this.world, power);
+    this.powerOv.setVisible(visible);
+  }
+
+  /** 4 Hz refresh while the overlay is on (power flags change only at day boundaries anyway). */
+  refreshPower(): void {
+    if (this.power !== null && this.powerOv.visible) this.powerOv.update(this.world, this.power);
   }
 
   /** T-207: bind the sim Fields (land value truth) and refresh the texture. */

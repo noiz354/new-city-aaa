@@ -7,6 +7,9 @@ export interface PriceList {
   zonePerTile: number;
   bulldozeRoad: number;
   bulldozePerTile: number;
+  /** T-405: flat coal-plant price + per-tile power-line price (toolbar tips). */
+  powerPlant: number;
+  powerLinePerTile: number;
 }
 
 export interface UiActions {
@@ -19,12 +22,16 @@ export interface UiActions {
   clearSelection(): void;
   /** T-207: land-value overlay gradient toggle (V key / TopBar). */
   toggleValueOverlay(): void;
+  /** T-405: power-grid overlay toggle (P key / TopBar). */
+  togglePowerOverlay(): void;
   /** T-303: open/close the budget panel. */
   toggleBudget(): void;
   /** T-302: set a zone's tax rate (0..20 %); clamped by the sim. */
   setTax(zone: 'r' | 'c' | 'i', rate: number): void;
   /** T-204 FR-C06: why is growth blocked on this lot? (null = not blocked) */
-  growthBlockReason(x: number, y: number): 'unzoned' | 'occupied' | 'no-demand' | 'no-road-access' | null;
+  growthBlockReason(x: number, y: number): 'unzoned' | 'occupied' | 'no-demand' | 'no-road-access' | 'no-power' | null;
   /** Sim-owned, player-facing text for the no-road-attachment block (FR-C06/VS-2a). */
   roadAccessReason(): string;
+  /** T-405: sim-owned, player-facing text for the no-power block. */
+  powerReason(): string;
 }

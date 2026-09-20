@@ -21,6 +21,7 @@ function snap(over: Partial<SimSnapshot>): SimSnapshot {
     paused: false,
     speed: 1,
     counts: { roads: 0, zonesR: 0, zonesC: 0, zonesI: 0 },
+    power: { active: false, plants: 0, nets: 0, supplyMw: 0, demandMw: 0, unpowered: 0 },
     ...over,
   };
 }

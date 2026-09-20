@@ -29,12 +29,14 @@ export interface TileRect {
   y1: number;
 }
 
-export type ToolId = 'select' | 'road' | 'zone-r' | 'zone-c' | 'zone-i' | 'bulldoze';
+export type ToolId = 'select' | 'road' | 'zone-r' | 'zone-c' | 'zone-i' | 'power-line' | 'plant' | 'bulldoze';
 
 /** Player-issued mutations. Every sim state change flows through a Command. */
 export type Command =
   | { kind: 'place-road'; path: TilePos[] }
   | { kind: 'paint-zone'; rect: TileRect; zone: 1 | 2 | 3 }
+  | { kind: 'place-power-line'; path: TilePos[] }
+  | { kind: 'place-plant'; x: number; y: number }
   | { kind: 'bulldoze'; rect: TileRect };
 
 export type CommandResult = { ok: true; cost: number; tiles: number } | { ok: false; reason: string; shortBy?: number };
@@ -48,7 +50,13 @@ export type SimEvent =
   /** Building lifecycle change (T-201/T-202). state: 0=vacant(demolished) 1=construction 2=occupied 3=abandoned. */
   | { type: 'building-changed'; id: number; x: number; y: number; state: number }
   /** Road attachment flip on a zoned/building tile (T-204, FR-C06). blocked=true → show "No road connection". */
-  | { type: 'road-access-changed'; x: number; y: number; blocked: boolean };
+  | { type: 'road-access-changed'; x: number; y: number; blocked: boolean }
+  /** Power flip on a zoned/building tile (T-405). powered=false → show "No power" (amber ⚡). */
+  | { type: 'power-changed'; x: number; y: number; powered: boolean }
+  /** Power plant placed (present) or removed (!present) on a tile (T-405 plant markers). */
+  | { type: 'plant-changed'; x: number; y: number; present: boolean }
+  /** Power-line layer changed somewhere (bulk; view resyncs the line projection wholesale). */
+  | { type: 'power-line-changed' };
 
 export interface SimDate {
   year: number;
@@ -75,6 +83,13 @@ export interface SaveLayers {
   height: Uint8Array;
   zone: Uint8Array;
   road: Uint8Array;
+  /** T-405: power-line conductor tiles (zeros for saves predating layers sver 2). */
+  powerLine: Uint8Array;
+}
+
+/** Power section payload (codec section 6, sver 1): player-built plant sites. */
+export interface SavePower {
+  plants: TilePos[];
 }
 
 /** One building-store slot in a save (T-202). state 0 = free slot; slot order = stable building ids. */
@@ -136,6 +151,8 @@ export interface SimSnapshot {
   paused: boolean;
   speed: number;
   counts: { roads: number; zonesR: number; zonesC: number; zonesI: number };
+  /** T-405: live grid readout (derived; HUD/inspector only). */
+  power: { active: boolean; plants: number; nets: number; supplyMw: number; demandMw: number; unpowered: number };
 }
 
 // ---- dependency-inversion contracts (module-boundaries §2) ----
@@ -176,6 +193,10 @@ export interface WorldView {
   readonly zone: Uint8Array;
   readonly road: Uint8Array;
   readonly roadMask: Uint8Array;
+  /** T-405: power-line conductor tiles (view line projection reads this). */
+  readonly powerLine: Uint8Array;
+  /** T-405: tile → buildingId (-1=none); the power overlay tints building tiles. */
+  readonly building: Int32Array;
   readonly chunkDirty: Uint8Array;
   idx(x: number, y: number): number;
   inBounds(x: number, y: number): boolean;
@@ -192,6 +213,8 @@ export interface CommandHost {
   execute(cmd: Command): CommandResult;
   validateRoad(path: TilePos[]): CommandResult & { plan?: RoadPlan };
   validateZone(rect: TileRect): CommandResult & { plan?: ZonePlan };
+  validatePowerLine(path: TilePos[]): CommandResult & { plan?: RoadPlan };
+  validatePlant(x: number, y: number): CommandResult;
   validateBulldoze(rect: TileRect): CommandResult & { plan?: BulldozePlan };
 }
 
@@ -202,4 +225,5 @@ export interface SaveSource {
   getSaveLayers(): SaveLayers;
   getSaveEntities(): SaveEntities;
   getSavePolicy(): SavePolicy;
+  getSavePower(): SavePower;
 }

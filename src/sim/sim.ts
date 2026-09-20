@@ -7,6 +7,7 @@ import type {
   SaveLayers,
   SaveMeta,
   SavePolicy,
+  SavePower,
   SimEvent,
   SimSnapshot,
 } from '../shared/types.js';
@@ -17,9 +18,20 @@ import { Cohort } from './cohort.js';
 import { Demand } from './demand.js';
 import { Fields } from './fields.js';
 import { normalizeRect } from '../shared/grid.js';
-import { applyBulldoze, applyRoad, applyZone, validateBulldoze, validateRoad, validateZone } from './commands.js';
+import {
+  applyBulldoze,
+  applyPowerLine,
+  applyRoad,
+  applyZone,
+  validateBulldoze,
+  validatePlant,
+  validatePowerLine,
+  validateRoad,
+  validateZone,
+} from './commands.js';
 import { Economy } from './economy.js';
 import { Growth } from './growth.js';
+import { PowerGrid } from './power.js';
 import { RoadAccess } from './road-access.js';
 import { RoadGraph } from './roadGraph.js';
 import { Rng } from './rng.js';
@@ -42,6 +54,7 @@ export class Sim {
   readonly buildings: Buildings; // T-201: authoritative building lifecycle store
   readonly growth: Growth; // T-202: daily scoring → spawn + move-in
   readonly roadAccess: RoadAccess; // T-204: canonical attachment flags (derived truth)
+  readonly power: PowerGrid; // T-405: electrical nets over lines/roads/buildings (derived truth)
   readonly cohort: Cohort; // T-305: residents/jobs/gravity match/unemployment/happiness
   readonly roadGraph: RoadGraph; // T-401: node/edge road graph (derived; traffic A* + power seam)
   readonly upkeep: Upkeep; // T-205: monthly per-building/road upkeep (economy stage)
@@ -56,13 +69,14 @@ export class Sim {
     this.rng = new Rng(this.world.seed ^ 0x51ed2709);
     this.buildings = new Buildings(this.world);
     this.roadAccess = new RoadAccess(this.world);
+    this.power = new PowerGrid(this.world, this.buildings); // derived; empty grid ⇒ inactive ⇒ self-powered
     this.roadGraph = new RoadGraph(this.world); // derived; built eagerly from the (empty) road layer
     this.roadGraph.rebuildAll();
     this.cohort = new Cohort(this.world, this.buildings);
     this.demand = new Demand(this.world, this.buildings, { cohort: this.cohort, getTax: () => this.economy.tax });
     this.fields = new Fields(this.world, this.buildings);
     this.fields.recompute(); // fields valid from t=0 (growth scores read them day 1)
-    this.growth = new Growth(this.world, this.buildings, this.roadAccess, this.demand, this.fields);
+    this.growth = new Growth(this.world, this.buildings, this.roadAccess, this.power, this.demand, this.fields);
     this.upkeep = new Upkeep(this.world, this.buildings, this.economy);
   }
 
@@ -75,6 +89,8 @@ export class Sim {
     // then the daily growth pass at the day boundary (heavy systems on day boundaries only).
     this.buildings.onTick(tick);
     if (tick % TICKS_PER_DAY === 0) {
+      // Power recompute FIRST in the daily pass: growth spawn/move-in + icons share one truth.
+      this.power.recompute();
       this.growth.onDay(tick);
       // Cohort (jobs/agents stage) recomputes BEFORE demand (frozen order §2); demand then reads it.
       this.cohort.recompute(this.economy.tax.r);
@@ -101,9 +117,10 @@ export class Sim {
     // docs/02 §4 bankruptcy contract: below the limit only free commands may proceed
     // (all current command kinds are paid; the blocking reason feeds the banned-commands modal).
     if (this.economy.isBankrupt()) return { ok: false, reason: 'bankrupt' };
+    const isPlant = (x: number, y: number): boolean => this.power.isPlant(x, y);
     let res: CommandResult;
     if (cmd.kind === 'place-road') {
-      const v = validateRoad(this.world, this.economy, cmd.path);
+      const v = validateRoad(this.world, this.economy, cmd.path, isPlant);
       if (!v.ok || !v.plan) res = v;
       else {
         for (const t of v.plan.newTiles) this.buildings.demolishAt(t.x, t.y); // road clears buildings
@@ -120,7 +137,7 @@ export class Sim {
         this.emitChunksFor(cmd.path);
       }
     } else if (cmd.kind === 'paint-zone') {
-      const v = validateZone(this.world, this.economy, cmd.rect);
+      const v = validateZone(this.world, this.economy, cmd.rect, isPlant);
       if (!v.ok || !v.plan) res = v;
       else {
         const applied = applyZone(this.world, v.plan, cmd.zone);
@@ -129,16 +146,52 @@ export class Sim {
         this.roadAccess.noteRect(cmd.rect, 0); // zone paint changes which tiles need flags
         this.emitChunksForRect(cmd.rect);
       }
+    } else if (cmd.kind === 'place-power-line') {
+      const v = validatePowerLine(this.world, this.economy, cmd.path, isPlant);
+      if (!v.ok || !v.plan) res = v;
+      else {
+        const applied = applyPowerLine(this.world, v.plan);
+        this.economy.spend(v.cost);
+        res = { ok: true, cost: v.cost, tiles: applied };
+        this.power.recompute(); // immediate truth: icons/snapshot share it before the next tick
+        this.events.push({ type: 'power-line-changed' }); // view resyncs the line projection
+        this.emitChunksFor(cmd.path);
+      }
+    } else if (cmd.kind === 'place-plant') {
+      const v = validatePlant(this.world, this.economy, cmd.x, cmd.y, isPlant);
+      if (!v.ok) res = v;
+      else {
+        this.buildings.demolishAt(cmd.x, cmd.y); // plant clears buildings (no refund, like roads)
+        this.world.clearZone(cmd.x, cmd.y); // plant clears zone paint (no refund, like roads)
+        this.power.addPlant(cmd.x, cmd.y);
+        this.economy.spend(v.cost);
+        res = { ok: true, cost: v.cost, tiles: 1 };
+        this.power.recompute(); // grid activates immediately (no one-tick dark start)
+        this.events.push({ type: 'plant-changed', x: cmd.x, y: cmd.y, present: true });
+        this.emitChunksFor([{ x: cmd.x, y: cmd.y }]);
+      }
     } else {
       const v = validateBulldoze(this.world, this.economy, cmd.rect);
       if (!v.ok || !v.plan) res = v;
       else {
         for (const t of v.plan.tiles) this.buildings.demolishAt(t.x, t.y); // bulldoze demolishes first
+        let removedPlant = false;
+        for (const t of v.plan.tiles) {
+          if (this.power.removePlant(t.x, t.y)) {
+            removedPlant = true;
+            this.events.push({ type: 'plant-changed', x: t.x, y: t.y, present: false });
+          }
+        }
+        const hadLines = v.plan.tiles.some(
+          (t) => (this.world.powerLine[this.world.idx(t.x, t.y)] as number) === 1,
+        );
         const applied = applyBulldoze(this.world, v.plan);
         this.economy.spend(v.cost);
+        if (removedPlant || hadLines) this.power.recompute(); // demolition follows grid truth immediately
         res = { ok: true, cost: v.cost, tiles: applied };
         this.roadAccess.noteRect(cmd.rect); // road loss may de-attach neighbours ±2
         this.roadGraph.noteRect(cmd.rect); this.roadGraph.flush(); // T-401: road loss rebuilds affected components
+        if (hadLines) this.events.push({ type: 'power-line-changed' });
         this.emitChunksForRect(cmd.rect);
       }
     }
@@ -186,6 +239,9 @@ export class Sim {
     for (const c of this.roadAccess.drainChanges()) {
       this.events.push({ type: 'road-access-changed', x: c.x, y: c.y, blocked: c.blocked });
     }
+    for (const c of this.power.drainChanges()) {
+      this.events.push({ type: 'power-changed', x: c.x, y: c.y, powered: c.powered });
+    }
     const out = this.events;
     this.events = [];
     return out;
@@ -214,6 +270,17 @@ export class Sim {
       paused: this.clock.paused,
       speed: this.clock.speed,
       counts: { ...this.world.counts },
+      power: (() => {
+        const s = this.power.netStatus();
+        return {
+          active: this.power.active,
+          plants: this.power.plantCount,
+          nets: s.nets,
+          supplyMw: s.supplyMw,
+          demandMw: s.demandMw,
+          unpowered: s.unpowered,
+        };
+      })(),
     };
   }
 
@@ -244,7 +311,17 @@ export class Sim {
     return { tax: { ...this.economy.tax } };
   }
 
-  loadState(meta: SaveMeta, layers: SaveLayers, entities?: SaveEntities, policy?: SavePolicy): void {
+  getSavePower(): SavePower {
+    return { plants: this.power.allPlants() };
+  }
+
+  loadState(
+    meta: SaveMeta,
+    layers: SaveLayers,
+    entities?: SaveEntities,
+    policy?: SavePolicy,
+    power?: SavePower,
+  ): void {
     if (meta.worldSize !== this.world.size) {
       throw new Error(`save size ${meta.worldSize} != world size ${this.world.size} (resize unsupported)`);
     }
@@ -253,6 +330,12 @@ export class Sim {
     else this.buildings.reset(); // pre-T-202 saves carry no entity section → restore empty (repair note)
     this.roadAccess.recomputeForLoad(this.buildings); // derived flags follow the restored layers silently
     this.roadGraph.rebuildAll(); // T-401: graph is derived; rebuilt canonically from restored road layer
+    // T-405 (v3 save-format): restore persisted plant sites, then rebuild derived power flags.
+    // Absence (pre-v3 save) leaves zero plants; with no lines either the grid stays inactive and
+    // the city runs self-powered (spec §9 legacy-guard — old saves keep growing).
+    this.power.clearPlants();
+    for (const p of power?.plants ?? []) this.power.addPlant(p.x, p.y);
+    this.power.recomputeForLoad();
     this.fields.invalidateStatic(); // restored terrain bytes → rebuild static base
     this.fields.recompute(); // land value is derived; rebuilt from restored world+buildings
     const speed = meta.speed === 0 || meta.speed === 1 || meta.speed === 2 || meta.speed === 3 ? meta.speed : 1;
@@ -287,6 +370,7 @@ export class Sim {
     let h = fnv1aBytes(head);
     for (const part of this.world.hashParts()) h = fnv1aBytes(part, h);
     h = this.buildings.hashInto(h);
+    h = this.power.hashInto(h); // T-405: plant sites are sim state (flags derive from them)
     return h >>> 0;
   }
 }
