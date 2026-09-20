@@ -105,3 +105,19 @@ describe('T-301 — bankruptcy block (docs/02 §4: < −$5,000)', () => {
     expect(sim.snapshot().balance).toBe(before - (m.expense - m.subsidy) * 2); // 2 subsidized road-upkeep months
   });
 });
+
+describe('T-302 — tax-rate slider scales treasury income (acceptance: 15% → income↑)', () => {
+  it('raising the residential rate from 9% to 15% lifts monthly tax income on the same city', () => {
+    const sim = tinySim();
+    withR1(sim);
+    runDays(sim, 10); // four residents housed
+    expect(sim.buildings.population()).toBe(4);
+    const at9 = sim.economy.collectTax(sim.buildings);
+    expect(at9).toBe(23); // baseline from the canonical-formula test above
+    sim.economy.setTax('r', 15);
+    const at15 = sim.economy.collectTax(sim.buildings);
+    // income ∝ rate/9, so 15% must exceed 9% on identical buildings.
+    expect(at15).toBeGreaterThan(at9);
+    expect(at15).toBe(Math.floor(25 * (15 / 9) * 0.92)); // ≈ 38
+  });
+});

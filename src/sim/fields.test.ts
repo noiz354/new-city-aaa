@@ -103,7 +103,7 @@ describe('Fields: land value v0 (T-207)', () => {
     // R lots on BOTH sides: plume side has LOWER tile index (would win every pure tie)
     sim.execute({ kind: 'paint-zone', rect: { x0: 3, y0: 9, x1: 4, y1: 9 }, zone: 1 });
     sim.execute({ kind: 'paint-zone', rect: { x0: 28, y0: 9, x1: 31, y1: 9 }, zone: 1 });
-    runDays(sim, 4); // 1/day pacing → first 4 R picks
+    runDays(sim, 2); // budget N=2/day at pop 0 → top-4-scored R picks (the clean lots)
     const cleanCount = [28, 29, 30, 31].filter((x) => sim.buildings.stateAt(x, 9) >= 1).length;
     const plumeCount = [3, 4].filter((x) => sim.buildings.stateAt(x, 9) >= 1).length;
     expect(cleanCount).toBeGreaterThanOrEqual(2);

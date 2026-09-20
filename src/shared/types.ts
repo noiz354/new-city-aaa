@@ -29,12 +29,15 @@ export interface TileRect {
   y1: number;
 }
 
-export type ToolId = 'select' | 'road' | 'zone-r' | 'zone-c' | 'zone-i' | 'bulldoze';
+export type ToolId = 'select' | 'road' | 'zone-r' | 'zone-c' | 'zone-i' | 'power-line' | 'plant' | 'water-tower' | 'bulldoze';
 
 /** Player-issued mutations. Every sim state change flows through a Command. */
 export type Command =
   | { kind: 'place-road'; path: TilePos[] }
   | { kind: 'paint-zone'; rect: TileRect; zone: 1 | 2 | 3 }
+  | { kind: 'place-power-line'; path: TilePos[] }
+  | { kind: 'place-plant'; x: number; y: number }
+  | { kind: 'place-tower'; x: number; y: number }
   | { kind: 'bulldoze'; rect: TileRect };
 
 export type CommandResult = { ok: true; cost: number; tiles: number } | { ok: false; reason: string; shortBy?: number };
@@ -48,7 +51,17 @@ export type SimEvent =
   /** Building lifecycle change (T-201/T-202). state: 0=vacant(demolished) 1=construction 2=occupied 3=abandoned. */
   | { type: 'building-changed'; id: number; x: number; y: number; state: number }
   /** Road attachment flip on a zoned/building tile (T-204, FR-C06). blocked=true → show "No road connection". */
-  | { type: 'road-access-changed'; x: number; y: number; blocked: boolean };
+  | { type: 'road-access-changed'; x: number; y: number; blocked: boolean }
+  /** Power flip on a zoned/building tile (T-405). powered=false → show "No power" (amber ⚡). */
+  | { type: 'power-changed'; x: number; y: number; powered: boolean }
+  /** Power plant placed (present) or removed (!present) on a tile (T-405 plant markers). */
+  | { type: 'plant-changed'; x: number; y: number; present: boolean }
+  /** Power-line layer changed somewhere (bulk; view resyncs the line projection wholesale). */
+  | { type: 'power-line-changed' }
+  /** Pressure flip on a zoned/building tile (T-406). watered=false shows a blue droplet icon. */
+  | { type: 'water-changed'; x: number; y: number; watered: boolean }
+  /** Water tower placed (present) or removed (!present) on a tile (T-406 tower markers). */
+  | { type: 'tower-changed'; x: number; y: number; present: boolean };
 
 export interface SimDate {
   year: number;
@@ -75,6 +88,18 @@ export interface SaveLayers {
   height: Uint8Array;
   zone: Uint8Array;
   road: Uint8Array;
+  /** T-405: power-line conductor tiles (zeros for saves predating layers sver 2). */
+  powerLine: Uint8Array;
+}
+
+/** Power section payload (codec section 6, sver 1): player-built plant sites. */
+export interface SavePower {
+  plants: TilePos[];
+}
+
+/** Water section payload (codec section 7, sver 1): player-built tower sites. */
+export interface SaveWater {
+  towers: TilePos[];
 }
 
 /** One building-store slot in a save (T-202). state 0 = free slot; slot order = stable building ids. */
@@ -93,6 +118,15 @@ export interface SaveEntities {
   slots: BuildingSlotData[];
 }
 
+/**
+ * Policy section payload (codec section 5, sver 1). Per-zone tax rates (0..20 %) introduced
+ * at save-version 2 (T-302, spec §9 ask-first). Service funding lands later (VS-5) as an
+ * additional optional field — parsePolicy tolerates a longer payload and missing bytes.
+ */
+export interface SavePolicy {
+  tax: { r: number; c: number; i: number };
+}
+
 /** One settled month as the HUD sees it (all integers; sim/economy.ts MonthEntry mirrors it). */
 export interface MonthLedger {
   income: number;
@@ -107,6 +141,8 @@ export interface SimSnapshot {
   population: number;
   /** T-206 FR-S02: RCI demand ∈ [−100,100], integer-rounded for the HUD bars. */
   demand: { r: number; c: number; i: number };
+  /** T-302: per-zone tax rate (0..20 %); surfaced so the tax sliders render current values. */
+  tax: { r: number; c: number; i: number };
   /** T-208 FR-U02 cohort-vs-jobs readout: 0 by canonical ledger — model lands with T-305. */
   jobs: number;
   /** T-208 FR-U02: fraction currently unemployed ∈ [0,1]; same T-305 ledger ⇒ 0. */
@@ -125,6 +161,10 @@ export interface SimSnapshot {
   paused: boolean;
   speed: number;
   counts: { roads: number; zonesR: number; zonesC: number; zonesI: number };
+  /** T-405: live grid readout (derived; HUD/inspector only). */
+  power: { active: boolean; plants: number; nets: number; supplyMw: number; demandMw: number; unpowered: number };
+  /** T-406: live water readout (derived; HUD/inspector only). */
+  water: { active: boolean; towers: number; nets: number; supplyKl: number; demandKl: number; unwatered: number };
 }
 
 // ---- dependency-inversion contracts (module-boundaries §2) ----
@@ -165,6 +205,10 @@ export interface WorldView {
   readonly zone: Uint8Array;
   readonly road: Uint8Array;
   readonly roadMask: Uint8Array;
+  /** T-405: power-line conductor tiles (view line projection reads this). */
+  readonly powerLine: Uint8Array;
+  /** T-405: tile → buildingId (-1=none); the power overlay tints building tiles. */
+  readonly building: Int32Array;
   readonly chunkDirty: Uint8Array;
   idx(x: number, y: number): number;
   inBounds(x: number, y: number): boolean;
@@ -181,6 +225,9 @@ export interface CommandHost {
   execute(cmd: Command): CommandResult;
   validateRoad(path: TilePos[]): CommandResult & { plan?: RoadPlan };
   validateZone(rect: TileRect): CommandResult & { plan?: ZonePlan };
+  validatePowerLine(path: TilePos[]): CommandResult & { plan?: RoadPlan };
+  validatePlant(x: number, y: number): CommandResult;
+  validateTower(x: number, y: number): CommandResult;
   validateBulldoze(rect: TileRect): CommandResult & { plan?: BulldozePlan };
 }
 
@@ -190,4 +237,7 @@ export interface SaveSource {
   getSaveMeta(): SaveMeta;
   getSaveLayers(): SaveLayers;
   getSaveEntities(): SaveEntities;
+  getSavePolicy(): SavePolicy;
+  getSavePower(): SavePower;
+  getSaveWater(): SaveWater;
 }

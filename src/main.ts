@@ -5,8 +5,10 @@ import type { CommandHost } from './shared/types.js';
 import { decodeSave, encodeSave } from './persistence/codec.js';
 import { SlotManager, type SlotId } from './persistence/store.js';
 import { Sim } from './sim/sim.js';
-import { validateBulldoze, validateRoad, validateZone } from './sim/commands.js';
+import { validateBulldoze, validatePlant, validatePowerLine, validateRoad, validateTower, validateZone } from './sim/commands.js';
 import { COSTS } from './sim/tuning/costs.js';
+import { COSTS_POWER } from './sim/tuning/power.js';
+import { COSTS_WATER } from './sim/tuning/water.js';
 import type { UiActions } from './ui/actions.js';
 import { mountReact } from './ui/react/mount.js';
 import { UiStore } from './ui/store.js';
@@ -49,8 +51,11 @@ async function boot(): Promise<void> {
   const host: CommandHost = {
     world: sim.world,
     execute: (cmd) => sim.execute(cmd),
-    validateRoad: (path) => validateRoad(sim.world, sim.economy, path),
-    validateZone: (rect) => validateZone(sim.world, sim.economy, rect),
+    validateRoad: (path) => validateRoad(sim.world, sim.economy, path, (x, y) => sim.power.isPlant(x, y), (x, y) => sim.water.isTower(x, y)),
+    validateZone: (rect) => validateZone(sim.world, sim.economy, rect, (x, y) => sim.power.isPlant(x, y), (x, y) => sim.water.isTower(x, y)),
+    validatePowerLine: (path) => validatePowerLine(sim.world, sim.economy, path, (x, y) => sim.power.isPlant(x, y), (x, y) => sim.water.isTower(x, y)),
+    validatePlant: (x, y) => validatePlant(sim.world, sim.economy, x, y, (px, py) => sim.power.isPlant(px, py), (px, py) => sim.water.isTower(px, py)),
+    validateTower: (x, y) => validateTower(sim.world, sim.economy, x, y, (px, py) => sim.power.isPlant(px, py), (px, py) => sim.water.isTower(px, py)),
     validateBulldoze: (rect) => validateBulldoze(sim.world, sim.economy, rect),
   };
 
@@ -59,17 +64,19 @@ async function boot(): Promise<void> {
     await storage.save(slot, bytes);
     store.toast(`Saved ${slot} (${(bytes.length / 1024).toFixed(1)} KB)`);
   };
-  const load = async (slot: SlotId): Promise<void> => {
+    const load = async (slot: SlotId): Promise<void> => {
     const bytes = await storage.load(slot);
     if (!bytes) {
       store.toast(`Slot ${slot} is empty`);
       return;
     }
     const dec = decodeSave(bytes);
-    sim.loadState(dec.meta, dec.layers, dec.entities ?? undefined);
+    sim.loadState(dec.meta, dec.layers, dec.entities ?? undefined, dec.policy, dec.power, dec.water);
     view.setWorld(sim.world);
     view.syncBuildings(sim.buildings.serialize().slots);
     view.syncIcons(sim.roadAccess.collectBlocked()); // T-204: post-load icon resync
+    view.attachPower(sim.power, store.getState().powerOverlay); // T-405: plants + overlay rebind
+    view.syncPower(sim.power.collectUnpowered()); // T-405: post-load unpowered-icon resync
     store.world = sim.world;
     store.set({ snapshot: sim.snapshot(), selectedTile: null });
     store.toast(`Loaded ${slot}${dec.repairs.length > 0 ? ` (${dec.repairs.length} repairs)` : ''}`);
@@ -98,11 +105,44 @@ async function boot(): Promise<void> {
       view.attachFields(sim.fields, next);
       store.set({ valueOverlay: next });
     },
+    // T-405: power-grid overlay — same toggle contract as the value overlay; sim truth binds
+    // through view.attachPower; refresh cadence rides the 250ms snapshot pump below.
+    togglePowerOverlay: () => {
+      const next = !store.getState().powerOverlay;
+      view.attachPower(sim.power, next);
+      store.set({ powerOverlay: next });
+    },
+    // T-406: water-pressure overlay — same toggle contract; sim truth binds
+    // through view.attachWater; refresh cadence rides the 250ms snapshot pump below.
+    toggleWaterOverlay: () => {
+      const next = !store.getState().waterOverlay;
+      view.attachWater(sim.water, next);
+      store.set({ waterOverlay: next });
+    },
+    // T-403: traffic LOS overlay — same toggle contract; sim truth binds through
+    // view.attachTraffic; refresh cadence rides the 250ms snapshot pump below.
+    toggleTrafficOverlay: () => {
+      const next = !store.getState().trafficOverlay;
+      view.attachTraffic(sim.roadGraph, next);
+      store.set({ trafficOverlay: next });
+    },
     toggleBudget: () => store.set({ budgetOpen: !store.getState().budgetOpen }), // T-303
+    // T-302: tax-rate writer (the seam economy.setTax existed for). Pushes a fresh snapshot so the
+    // sliders re-render at the clamped value; persistence rides the next save via section 5.
+    setTax: (zone, rate) => {
+      sim.economy.setTax(zone, rate);
+      store.set({ snapshot: sim.snapshot() });
+    },
     // T-204 FR-C06: sim-owned blocking reason for the Inspector (growth.growthBlockReason
     // probe; icon layer is the visual twin — both read the same attachment truth).
     growthBlockReason: (x, y) => sim.growth.growthBlockReason(x, y),
     roadAccessReason: () => sim.roadAccess.blockedReason(),
+    // T-405 FR-C03: sim-owned unpowered reason for the Inspector (growth.growthBlockReason
+    // 'no-power' probe; ⚡ icon layer is the visual twin — both read the same grid truth).
+    powerReason: () => sim.power.unpoweredReason(),
+    // T-406 FR-C03: sim-owned unwatered reason for the Inspector (growth.growthBlockReason
+    // 'no-water' probe; 💧 icon layer is the visual twin — both read the same grid truth).
+    waterReason: () => sim.water.unwateredReason(),
   };
 
   new ToolController(view.canvas, view, store, host, actions);
@@ -111,6 +151,9 @@ async function boot(): Promise<void> {
     zonePerTile: COSTS.zonePerTile,
     bulldozeRoad: COSTS.bulldozeRoad,
     bulldozePerTile: COSTS.bulldozePerTile,
+    powerPlant: COSTS_POWER.plant,
+    powerLinePerTile: COSTS_POWER.linePerTile,
+    waterTower: COSTS_WATER.tower,
   });
 
   let last = performance.now();
@@ -130,6 +173,16 @@ async function boot(): Promise<void> {
         snapAcc = 0;
         store.set({ snapshot: sim.snapshot() });
         view.refreshLandValue(); // T-207 overlay pump (no-op when hidden)
+        view.refreshPower(); // T-405 overlay pump (no-op when hidden)
+        view.refreshTraffic(); // T-403 overlay pump (no-op when hidden)
+        // T-403 congestion badge: F corridors scream, E corridors warn (docs/02 §Traffic alert).
+        {
+          const t = sim.traffic.stats();
+          const f = t.losCounts[5];
+          const eCount = t.losCounts[4];
+          const alert = f > 0 ? `🚗 Macet: ${f} koridor LOS F` : eCount > 0 ? `🚗 ${eCount} koridor nyaris macet (LOS E)` : null;
+          if (store.getState().trafficAlert !== alert) store.set({ trafficAlert: alert });
+        }
       }
       const d = sim.clock.date();
       if (d.month === 1 && d.day === 1 && d.year !== lastAutoYear) {

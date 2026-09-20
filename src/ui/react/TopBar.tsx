@@ -12,12 +12,20 @@ export function TopBar({
   driver,
   actions,
   valueOverlay,
+  powerOverlay,
+  waterOverlay,
+  trafficOverlay,
+  trafficAlert,
 }: {
   snapshot: SimSnapshot;
   projection: 'ortho' | 'persp';
   driver: string;
   actions: UiActions;
   valueOverlay: boolean;
+  powerOverlay: boolean;
+  waterOverlay: boolean;
+  trafficOverlay: boolean;
+  trafficAlert: string | null;
 }): JSX.Element {
   const d = snapshot.date;
   const speeds: { label: string; value: 0 | 1 | 2 | 3 }[] = [
@@ -76,6 +84,35 @@ export function TopBar({
       >
         Value
       </button>
+      {/* T-405: power-grid overlay (nets + unpowered lots) */}
+      {/* T-406: water-pressure overlay (gradient + unwatered lots) */}
+      <button
+        className={powerOverlay ? 'on' : ''}
+        onClick={() => actions.togglePowerOverlay()}
+        title="Power grid overlay (P)"
+      >
+        Power
+      </button>
+      <button
+        className={waterOverlay ? 'on' : ''}
+        onClick={() => actions.toggleWaterOverlay()}
+        title="Water pressure overlay (W)"
+      >
+        Water
+      </button>
+      {/* T-403: traffic LOS overlay (roads A→F green→red) + congestion badge */}
+      <button
+        className={trafficOverlay ? 'on' : ''}
+        onClick={() => actions.toggleTrafficOverlay()}
+        title="Traffic overlay (T)"
+      >
+        Traffic
+      </button>
+      {trafficAlert !== null && (
+        <span className="stat alert" role="alert" title="Congestion alert (docs/02 §Traffic)">
+          {trafficAlert}
+        </span>
+      )}
       <span className="stat dim" title="Save storage driver">
         {driver}
       </span>

@@ -18,6 +18,26 @@
 > bukti screenshot VS-2a/T-303 tertangkap → **T-202..T-208 `[x]`, T-303 `[x]`, VS-2 GATE `[x]` (visual)**.
 > Tiga bug ditemukan oleh capture & diperbaiki dengan test: culling InstancedMesh (rumah/ikon hilang saat kamera geser),
 > Net budget panel tanpa subsidi, demand tak di-recompute saat load.
+> Update 2026-09-20 #1: **T-302 `[x]`** — slider pajak R/C/I (0–20%, default 9%) + persistensi tax rate via
+> **save-format v2 + migrasi** (keputusan §9 ask-first yang sebelumnya di-skip, disetujui user: v2+migration).
+> SAVE_VERSION 1→2, section 5 (policy: tax r/c/i); save v1 (tanpa policy) di-migrasi ke default 9/9/9 + repair note.
+> `codec.test.ts` +3 test (version/policy, persist custom tax, migrasi v1→v2), `economy.test.ts` +1 (15%→income↑).
+> Suite **147/147**, lint/arch/licenses/typecheck/build hijau. T-304…T-306 kini tidak lagi ter-gate keputusan format save.
+> Update 2026-09-20 #2: **T-304 + T-305 `[x]`** — cohort nyata (`sim/cohort.ts`: residents, jobs C/I, gravity match,
+> unemployment, happiness) menggantikan stub demand; accept **R+C+I unemployment <20%** tertest. Suite **153/153**.
+> Update 2026-09-20 #3: **T-306 `[x]`** — balancing suite S-green (`sim/balancing.test.ts`) + `tuning/CHANGELOG.md`.
+> Memerlukan 2 koreksi engine (budget growth N sesuai docs §3; plafon employment cohort `matched=W` saat J≥W).
+> Band terkalibrasi: pop 4136 ∈[3k,8k], treasury>0 tiap bulan, u 0–12%, happiness 55–85. S-sprawl/S-crisis tetap
+> ditunda (traffic/power = slice berikutnya). Suite **156/156**.
+> Update 2026-09-20 #6: **T-403 `[x]`** — traffic assignment harian (flow cohort→LOS A–F, BPR feedback,
+> penalti komute lag-1-hari) + TrafficOverlay & badge kemacetan (kunci T). UJ-03 hijau di test. Perf traffic ≈ 0.004 ms/hari.
+
+> Update 2026-09-20 #5: **T-402 `[x]`** — pathfinder A* berbudget + fallback greedy + cache O-D LRU
+> (`sim/path.ts` + protokol `path.worker.ts`, wiring `sim.ts`, 8 test + bench perf: 500 path ≈ 0.014ms/path).
+> Suite 202/203 (1 = flake `dayMsP95` pra-ada, path bench selalu lolos). Slot T-405 sengaja dilewat (sandbox lain).
+
+> Update 2026-09-20 #4: **T-401 `[x]`** — road graph builder (`sim/roadGraph.ts`), fondasi A* (T-402) & power
+> flood (T-405). Node/edge + component-scoped incremental rebuild. Suite **165/165**.
 
 ## VS-0 — Foundation (T-1xx)
 
@@ -168,9 +188,20 @@
     + BankruptcyModal (T-303 mengganti dengan budget panel); setTax clamp 0..20 (seam T-302).
   - **Evidence: vitest log** — economy.test.ts 7/7 (income exact 23 = 25×0.92; clamp; settle+ring; wrap;
     bankrupt recover; cadence) + 3 upkeep tests direvisi ke settle-semantics. Suite 138/138, perf hijau.
-  - **Note:** service funding (slider 50/100/150%) milik T-303; tax-rate persist ikut T-302 (§9-format).
-- [ ] **T-302 M — Slider pajak R/C/I.** 0–20% (default 9%); income = Σ level×rate×happinessFactor.
+  - **Note:** service funding (slider 50/100/150%) milik VS-5 (T-303 selesai tanpa funding — belum ada service era ini);
+    tax-rate persist telah selesai di T-302 via v2 + migrasi (keputusan §9 ask-first **resolved**).
+- [x] **T-302 M — Slider pajak R/C/I.** 0–20% (default 9%); income = Σ level×rate×happinessFactor.
   `Deps: T-301` · `Accept: 15% → income↑ happiness↓ (UJ-05 partial).` · `Evidence: screenshot + test.` · `Skills: frontend-ui-engineering`
+  - **Status: DONE 2026-09-20.** Slider R/C/I 0–20% di `BudgetPanel.tsx` (onTax → `economy.setTax`, clamp 0..20,
+    snapshot.tax membumikan nilai slider); persistensi tax rate via **save-format v2 + migrasi** (keputusan §9
+    ask-first: user menyetujui v2+migration). `codec.ts`: SAVE_VERSION 1→2, `SECTION_POLICY=5`, `encodePolicy`/
+    `parsePolicy`/`resolvePolicy` (default 9/9/9 untuk save pre-v2 / korup). `Sim.getSavePolicy()` + `loadState`
+    menerapkan policy; `SaveSource` & `SimSnapshot` membawa policy. `main.ts` menyalurkan `dec.policy` saat load.
+  - **Evidence: vitest log** — `economy.test.ts` 15%→income↑ (8 test ekonomi); `codec.test.ts` +3 (version/policy
+    hadir; custom tax 15/4/20 round-trip + continuation hash-equal; save v1 tanpa policy → default 9/9/9 + repair
+    note). `BudgetPanel.test.tsx` +1 (3 slider di-render di nilai saat ini). `npm run ci` hijau (147/147).
+  - **Note:** service funding (slider 50/100/150%) tetap milik VS-5 (belum ada service era ini); tidak di-persist
+    bersama T-302. Tax rate kini di-persist (§9 resolved: v2 + migrasi).
 - [x] **T-303 M — Budget panel.** Breakdown income/expense + sparkline 12 bulan + slider funding service.
   `Deps: T-301` · `Accept: panel akurat vs sim.` · `Evidence: screenshot.` · `Skills: vercel-react-best-practices, frontend-ui-engineering`
   - **Status: engine-complete 2026-09-19.** `BudgetPanel.tsx` (panel atas modal): breakdown exact dari
@@ -183,28 +214,115 @@
     income − gross upkeep, padahal treasury bergerak income − (gross − subsidi Frontier) → baris "Frontier subsidy"
     ditambah, `snapshot.lastMonth/history` kini membawa `subsidy`, render-test + economy test invariant Δbalance.
     Escape kini menutup panel (sebelumnya hanya B/✕). Slider funding tetap placeholder service-era (VS-5/VS-6).
-- [ ] **T-304 M — RCI demand matang.** Bobot unemployment/happiness/land/tax final + unit test.
+- [x] **T-304 M — RCI demand matang.** Bobot unemployment/happiness/land/tax final + unit test.
   `Deps: T-302` · `Accept: R+C+I → unemployment <20%.` · `Evidence: HUD screenshot.` · `Skills: city-builder-simulation-audit`
-- [ ] **T-305 M — Citizens + jobs (cohort).** Resident/job count, gravity match, unemployment + happiness.
+  - **Status: DONE 2026-09-20 (tersambung T-305).** Bobot tetap canonical docs/03 §2 (`tuning/demand.ts`,
+    tidak diubah — penguncian final milik T-306). Yang "matang" adalah inputnya: demand kini menerima
+    ledger cohort nyata (unemployment/happiness/jobsAvailable/workforceAvail) via injeksi `Demand({cohort, getTax})`,
+    bukan stub konstan; absence → stub netral (determinisme & pemakaian standalone tetap). Tax kini per-zone
+    dari `economy.tax` (persist v2). **Accept terpenuhi:** kota R+C+I berimbang → unemployment <20% (cohort.test).
+    **Evidence: vitest** (screenshot HUD perlu browser sandbox — lihat catatan T-302/VS-3).
+- [x] **T-305 M — Citizens + jobs (cohort).** Resident/job count, gravity match, unemployment + happiness.
   `Deps: T-304` · `Accept: kota R+C+I unemployment <20%.` · `Evidence: HUD screenshot.` · `Skills: city-builder-simulation-audit`
-- [ ] **T-306 M — Balancing suite + tuning lock.** Korpus skenario ekonomi hijau; angka tuning dikunci.
+  - **Status: DONE 2026-09-20.** Modul baru `sim/cohort.ts` (v1 net-flow per §1 scope-cut; migrasi/aging ditunda).
+    Residents = occ buildings.occupants (max-occup di-place growth). Jobs = pembukaan C/I occ (`jobsPerBuilding`
+    C2/I3 × level — tunable `tuning/cohort.ts`, "first guess — S-green decides"). Gravity match per-chunk
+    (`openings/(1+dist/800)²`, `gravityMeters=800`, cut `maxCommuteMeters=3000`, iterasi Map deterministis).
+    Happiness v1 = base 50 + employed·10 + lowTax·8 (residence setara → mean; subset docs/03 §4, sejalan
+    stub 80 yang sudah dipakai ekonomi T-301). Snapshot `jobs`/`unemployment` kini nyata (dulu 0 konstan T-208).
+  - **Keputusan model:** unemployment **0 saat J=0** (belum ada pasar kerja) — kota R-only tetap layak tumbuh
+    (kontrak VS-2a "zone R → rumah tumbuh"); begitu C/I ada, unemployment nyata naik bila tenaga kerja > pembukaan.
+    Tanpa ini, R-only → 100% unemployment → demandR negatif → growth mati total.
+  - **Integration:** `Sim.onTick` day-boundary `growth.onDay → cohort.recompute(tax.r) → demand.recompute →
+    fields.recompute` (order §2); `loadState()` recompute derived `cohort→demand` setelah restore world/buildings/tax.
+    Determinisme: derived, tidak dipersist; save→load→continue hash-equal tetap (codec/upkeep/demand parity tests).
+  - **Evidence: vitest — `cohort.test.ts` 6 test** (neutral-ledger bootstrap; invariant matched≤min(W,J);
+    **R+C+I unemployment <20% + snapshot HUD**; R-only J=0→u=0 jobMarket; determinisme script). Suite **153/153**
+    (+6), lint/arch/licenses/typecheck/build hijau. **Accept terpenuhi:** unemployment <20% (test).
+- [x] **T-306 M — Balancing suite + tuning lock.** Korpus skenario ekonomi hijau; angka tuning dikunci.
   `Deps: T-305` · `Accept: suite hijau.` · `Evidence: CI log.` · `Skills: city-builder-simulation-audit, city-builder-performance-gate`
+  - **Status: DONE 2026-09-20 (S-green).** Scenario bay `sim/balancing.ts` (spine city via command pipeline:
+    roads every `pitch`, strip R di atas, I di bawah; semua lot dalam radius road-port ≤2 sehingga `isConnected`).
+    `trajectory()` mengambil sampel bulanan deterministik. **S-green** (`sim/balancing.test.ts`):
+    (1) band trajectory pop 3k–8k, treasury>0 tiap bulan, unemployment 0–12%, happiness 55–85% selama 3 tahun;
+    (2) equilibrium tenaga−kerja J≥W saat plateau; (3) determinisme seeded-city.
+  - **Dua koreksi engine yang diperlukan (nilainya terkunci suite, dicatat di `src/sim/tuning/CHANGELOG.md`):**
+    (a) **budget growth N** = `clamp(2+floor(pop/500),2,25)` per docs/03 §3 — flat `maxSpawnsPerDay:1` tidak pernah
+    sampai ke band populasi (≤4380); 6 test yang mem-bake pacing lama di-update ke semantics N.
+    (b) **plafon employment cohort**: `matched=W` saat J≥W (pasar surplus mempekerjakan semua — loop "+" docs §5);
+    `matched=floor(J·g)` hanya saat J<W (scarcity bind via chunk-reach, kasus donut/sprawl).
+  - **Kalibrasi band (§4):** pop 4136 ∈[3k,8k], treasury>0 tiap bulan, u 0%, h 68% → band final
+    pop[3000,8000], treasury>0/bulan, u 0–12% (hypothesis 3–12% di-re-justifikasi: model sehat tak punya
+    forced frictional unemployment; upper 12% tetap menjaga regresi pasar-kerja). `GAS_DIRECTORY` memosisikan
+    startMoney/taxes; bobot tuning (TAX_BASE, jobsPerBuilding, growth N, dsb.) terkunci via suite ini.
+  - **Deferred:** S-sprawl (traffic LOS-p95 → VS-4) & S-crisis (power blackout + recovery → VS-3 fase-2) —
+    landing di sini begitu sistemnya ada, konstanta direkam di CHANGELOG.
+  - **Evidence: CI log** — `npm run ci` hijau: **156/156 test** (+3), lint/arch/licenses/typecheck/build.
 - [ ] **VS-3 GATE:** UJ-01 + UJ-02 penuh; UJ-05 lolos.
 
 ## VS-4 — Traffic & Utilities (T-4xx)
 
-- [ ] **T-401 M — Road graph builder.** Node/edge dari road tile, rebuild incremental; unit test T-junction + loop.
+- [x] **T-401 M — Road graph builder.** Node/edge dari road tile, rebuild incremental; unit test T-junction + loop.
   `Deps: VS-3 GATE` · `Accept: graph cocok fixture.` · `Evidence: vitest log.` · `Skills: tdd, city-builder-simulation-audit`
-- [ ] **T-402 L — A* + cache + worker.** Binary-heap A*, bobot BPR, cache O-D, offload worker; harness `npm run perf`.
+  - **Status: DONE 2026-09-20 (dibangun lebih awal — infrastruktur murni, tidak depend fungsional ke gate).**
+    `src/sim/roadGraph.ts`: node = road tile dengan 4-neighbour count ≠ 2 (endpoint/stub/junction); pure ring →
+    pseudo-node self-loop fixture. Edge = run count-2 maksimal dengan `{lengthM, lanes:2, speedKph:40, capacity:1600,
+    volume:0}` (§3/§6; kapasitas final milik balancing). Rebuild **component-scoped incremental** (komponen jalan
+    koneksi-4 yang menyentuh region diedit dibangun ulang utuh — merge/split tertangani, komponen lain dipakai ulang);
+    `graphVersion` monotonic (kunci invalidasi cache path T-402). Wiring `sim.ts`: rebuildAll konstruktor/loadState,
+    noteRect+flush pada place-road & bulldoze. Derived (tak dipersist). Attachment live tetap `RoadAccess.isConnected`
+    ≤2 (seam graph disediakan via `nearestNodeWithin` untuk konsumen T-402).
+  - **Evidence: vitest — `roadGraph.test.ts` 9 test** (straight/T-junction/loop/disconnected fixture exact;
+    flush vs rebuildAll struktural-equal; merge pada tambah konektor; split pada bulldoze tengah; version monotonic;
+    determinisme). Suite **165/165**.
+- [x] **T-402 L — A* + cache + worker.** Binary-heap A*, bobot BPR, cache O-D, offload worker; harness `npm run perf`.
   `Deps: T-401` · `Accept: 500 path <100ms; deterministik seed sama.` · `Evidence: perf log.` · `Skills: tdd, city-builder-simulation-audit`
-- [ ] **T-403 M — Traffic assignment + viz.** Volume → v/c → warna LOS + alert congestion.
+  - **Status: DONE 2026-09-20.** `src/sim/path.ts`: `Pathfinder` = heap binary tie-break deterministik `(f, nodeId)` +
+    A* arah-tunggal dengan **budget ekspansi** di loop utama (`PATH_TUNING.maxExpansions` 8192) — budget habis → pass
+    **greedy best-first (h-only, headroom 2×)** dan hasil diflag `fallback:true` (kontrol YAPF, docs/02 §Pathfinding/S-06);
+    heap terkuras tanpa dest → `null` (§7 no-path). Bobot `edgeWeightHours` = BPR §4 `1+α(v/c)^β` (α 0.15 β 4), heuristik
+    euclid/`maxSpeedKph` admissible (BPR ≥ 1). **Cache O-D LRU** key `graphVersion|origin|dest` (cap 4096) +
+    hit/miss/hitRatio + `stats()`; `flushCache()` eksplisit di setiap edit jalan sim (place-road/bulldoze) & loadState,
+    peanjaga malas di `route()` bila `graphVersion` bergeser. Derived — tak dipersist/codec/hash (spec §9). Cost greedy
+    dihitung ulang jujur dari edge terpilih. `src/sim/path.worker.ts`: protokol batch `{reqId, origin, dest, versionBucket}`
+    → `{ok, nodes, edges, costHours, fallback, stale}` **terurut reqId**, bucket mismatch di-skip gratis; core sync dipakai
+    vitest (worker channel asli = slice VS-8). Wiring `sim.ts`: `readonly pathfinder` setelah roadGraph. `perf/run.test.ts`:
+    bench 500 rute (instance **cacheless** untuk thru A* murni + run warm-mixed untuk hit-ratio), PerfResults additive
+    (`pathsPerDay/pathTotalMs/pathP95Ms/pathCacheHitRatio`, baseline lama tanpa field diguard), budget ≤ max(100ms, ×2).
+  - **Evidence: vitest — `path.test.ts` 8 test** (straight exact node/edge/cost + trivial; toggling rute BPR ke detour
+    paralel saat main dijams; disconnected → null; budget 3 → fallback:true tetap sampai dest, budget 0 → null; determinisme
+    dua-sim seed-sama JSON-equal; LRU cap/hit-ratio; round-trip protokol worker terurut+stale; flush cache di edit sim).
+    **Perf log (`npm run perf`): 500 path ≈ 6.8–13.4ms total (≈0.014–0.027ms/path), p95 ≈ 0.02ms, cache hit-ratio 0.976
+    — jauh di bawah accept 100ms.** Suite **202/203: 1 failure = flake dayMsP95 pra-ada** (gate noise sandbox kontended,
+    sudah terdokumentasi; rerun solo bergantian hijau/gagal — terkait T-402 BUKAN: path bench-nya selalu lolos budget).
+    lint/arch/licenses/typecheck/build hijau.
+- [x] **T-403 M — Traffic assignment + viz.** Volume → v/c → warna LOS + alert congestion.
   `Deps: T-402` · `Accept: 1 jalan macet (merah); paralel melegakan (UJ-03).` · `Evidence: 2 overlay screenshot.` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
+  - **Status: DONE 2026-09-20 (kode+test hijau; screenshot oleh sandbox lain).** `src/sim/traffic.ts` `Traffic`: pass harian
+    (cohort → traffic → demand, docs/02 §Daily) — flush cache path (volume kemarin = bobot BPR hari ini), flow worker→job
+    chunk dari snapshot cohort baru (`chunkData()`; gravity allocation mirror `COHORT_TUNING`, cap 2048 pair + overflow
+    terhitung), rute via cache T-402, lalu nol-kan volume + akumulasi `count × 2 trip × 0.8` per edge; v/c → LOS A–F
+    (`TRAFFIC_TUNING.losVCaps` 0.6/0.7/0.8/0.9/1.0); komute >45 mnt → `overCommuteShare` → penalti happiness cohort
+    (`commutePenaltyMax` 5 poin, **lag 1 hari**, order frozen). Tanpa persist/codec/hash (§9). BPR-feedback **tanpa damping**
+    — assignment all-or-nothing per pair; osilasi deterministik dicatat di kode (keputusan plan jebakan).
+  - **View:** `src/view/traffic.ts` `TrafficOverlay` (DataTexture per-tile by v/c, arch: view hanya impor `shared` →
+    structural `TrafficView` + warna duplikasi-kontrak dari losVCaps) + wiring view.ts (attach/refresh/setWorld-preserve)
+    + toggle TopBar (`Traffic`) & kunci **T** + badge alert 🚗 (LOS F / LOS E) via store `trafficAlert` (pump 250ms,
+    tanpa snapshot field — codec tak tersentuh).
+  - **Evidence test — `traffic.test.ts` 6 test:** threshold losOf A..F; UJ-03 kota koridor (junction benar, edge koridor
+    192m unik): volume 216 pekerja × 1.6 = 345.6 > kapasitas 200 → **v/c 1.7 LOS F (merah)** ✓; jalan paralel y=28 →
+    BPR feedback memindahkan arus → **koridor v/c kolaps < 0.3** ✓; penalti komute: bukti lag eksak (hari N cohort masih
+    0.63, hari N+1 turun >0.03); determinisme volume dua-sim; kota kosong → nol. **Perf: probe `traffic.recompute` ≈
+    0.004 ms/hari di hamlet (30 hari); bench path T-402 tetap 500 path ≈ 9 ms / hit-ratio 0.976.** Suite **200/201** —
+    1 failure = flake `dayMsP95` pra-ada (noi sandbox; dayMsP95 berosilasi 2.2–7.8ms antar-run kode-identik, T-403 terbukti
+    ~0.004ms/hari via probe). Gates: tsc/lint/arch/licenses/build hijau. Screenshot macet-merah + lega: di luar sandbox ini
+    (konvensi, grab Chromium sandbox lain).
 - [ ] **T-404 M — Visual agent pool.** 500 mobil + 300 pejalan sampling top flow; headlight malam.
   `Deps: T-403` · `Accept: mobil di jalan sibuk, 0 saat pause.` · `Evidence: screenshot.` · `Skills: three-best-practices`
-- [ ] **T-405 M — Power flood fill.** Plant + line/road hantar; supply/demand per net; brownout I-first; overlay + ikon.
-  `Deps: T-401` · `Accept: overload → ikon unpowered; plant ke-2 pulihkan (UJ-04).` · `Evidence: overlay screenshot.` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
-- [ ] **T-406 M — Water + pressure.** Tower/pump + pipe/road; falloff jarak/beban; unwatered hentikan growth.
-  `Deps: T-405` · `Accept: bangunan jauh unwatered sampai tower ke-2.` · `Evidence: screenshot.` · `Skills: city-builder-simulation-audit`
+- [x] **T-405 M — Power flood fill.** Plant + line/road hantar; supply/demand per net; brownout I-first; overlay + ikon.
+  `Deps: T-401` · `Accept: overload → ikon unpowered; plant ke-2 pulihkan (UJ-04).` · `Evidence: docs/tasks/T-405-power-overlay.png (save-format v2→v3 + legacy-guard, suite 175/176 — 1 flake perf pre-existing).` · `Skills: city-builder-simulation-audit, city-builder-playability-test`
+- [x] **T-406 M — Water + pressure.** Tower/pump + pipe/road; falloff jarak/beban; unwatered hentikan growth.
+  `Deps: T-405` · `Accept: bangunan jauh unwatered sampai tower ke-2.` · `Evidence: docs/tasks/T-406-water-overlay.png (save-format v3→v4 + legacy-guard, suite 186/187 — 1 flake perf pre-existing; view bounds culling fix).` · `Skills: city-builder-simulation-audit`
 - [ ] **T-407 S — Overlay utilitas.** Tab power/water/traffic/value + inspector akurat.
   `Deps: T-403,T-405` · `Accept: semua overlay render.` · `Evidence: screenshots.` · `Skills: frontend-ui-engineering, city-builder-visual-qa`
 - [ ] **VS-4 GATE:** UJ-03 + UJ-04 lolos.

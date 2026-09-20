@@ -6,22 +6,42 @@ import type {
   SaveEntities,
   SaveLayers,
   SaveMeta,
+  SavePolicy,
+  SavePower,
+  SaveWater,
   SimEvent,
   SimSnapshot,
 } from '../shared/types.js';
 import { fnv1aBytes } from '../shared/crc32.js';
 import { Buildings } from './buildings.js';
 import { Clock, TICKS_PER_DAY, TICKS_PER_MONTH } from './clock.js';
+import { Cohort } from './cohort.js';
 import { Demand } from './demand.js';
 import { Fields } from './fields.js';
 import { normalizeRect } from '../shared/grid.js';
-import { applyBulldoze, applyRoad, applyZone, validateBulldoze, validateRoad, validateZone } from './commands.js';
+import {
+  applyBulldoze,
+  applyPowerLine,
+  applyRoad,
+  applyZone,
+  validateBulldoze,
+  validatePlant,
+  validatePowerLine,
+  validateRoad,
+  validateTower,
+  validateZone,
+} from './commands.js';
 import { Economy } from './economy.js';
 import { Growth } from './growth.js';
+import { PowerGrid } from './power.js';
 import { RoadAccess } from './road-access.js';
+import { Pathfinder } from './path.js';
+import { RoadGraph } from './roadGraph.js';
 import { Rng } from './rng.js';
 import { CHUNK } from '../shared/types.js';
+import { Traffic } from './traffic.js';
 import { Upkeep } from './upkeep.js';
+import { WaterGrid } from './water.js';
 import { World, type TerrainPreset } from './world.js';
 
 export interface SimOptions {
@@ -39,6 +59,12 @@ export class Sim {
   readonly buildings: Buildings; // T-201: authoritative building lifecycle store
   readonly growth: Growth; // T-202: daily scoring → spawn + move-in
   readonly roadAccess: RoadAccess; // T-204: canonical attachment flags (derived truth)
+  readonly power: PowerGrid; // T-405: electrical nets over lines/roads/buildings (derived truth)
+  readonly water: WaterGrid; // T-406: pressure nets over tower-fed conductors (derived truth)
+  readonly cohort: Cohort; // T-305: residents/jobs/gravity match/unemployment/happiness
+  readonly roadGraph: RoadGraph; // T-401: node/edge road graph (derived; traffic A* + power seam)
+  readonly pathfinder: Pathfinder; // T-402: budgeted A* + O-D cache (derived; never persisted §9)
+  readonly traffic: Traffic; // T-403: daily volume assignment w/ BPR feedback + commute stats (derived)
   readonly upkeep: Upkeep; // T-205: monthly per-building/road upkeep (economy stage)
   readonly demand: Demand; // T-206: FR-S02 RCI demand, recomputed daily (derived)
   readonly fields: Fields; // T-207: land value + landFit (fields stage, derived)
@@ -51,10 +77,17 @@ export class Sim {
     this.rng = new Rng(this.world.seed ^ 0x51ed2709);
     this.buildings = new Buildings(this.world);
     this.roadAccess = new RoadAccess(this.world);
-    this.demand = new Demand(this.world, this.buildings);
+    this.power = new PowerGrid(this.world, this.buildings);
+    this.water = new WaterGrid(this.world, this.buildings, this.power); // derived; empty towers = inactive = self-watered // derived; empty grid ⇒ inactive ⇒ self-powered
+    this.roadGraph = new RoadGraph(this.world); // derived; built eagerly from the (empty) road layer
+    this.pathfinder = new Pathfinder(this.roadGraph); // derived; O-D cache keyed by graphVersion
+    this.roadGraph.rebuildAll();
+    this.cohort = new Cohort(this.world, this.buildings);
+    this.traffic = new Traffic(this.roadGraph, this.pathfinder, this.cohort); // derived daily pass (T-403)
+    this.demand = new Demand(this.world, this.buildings, { cohort: this.cohort, getTax: () => this.economy.tax });
     this.fields = new Fields(this.world, this.buildings);
     this.fields.recompute(); // fields valid from t=0 (growth scores read them day 1)
-    this.growth = new Growth(this.world, this.buildings, this.roadAccess, this.demand, this.fields);
+    this.growth = new Growth(this.world, this.buildings, this.roadAccess, this.power, this.water, this.demand, this.fields);
     this.upkeep = new Upkeep(this.world, this.buildings, this.economy);
   }
 
@@ -67,7 +100,15 @@ export class Sim {
     // then the daily growth pass at the day boundary (heavy systems on day boundaries only).
     this.buildings.onTick(tick);
     if (tick % TICKS_PER_DAY === 0) {
+      // Power recompute FIRST in the daily pass: growth spawn/move-in + icons share one truth.
+      this.power.recompute();
+      this.water.recompute(); // T-406: pressure truth joins the same pass (shared conductors)
       this.growth.onDay(tick);
+      // Cohort (jobs/agents stage) recomputes BEFORE demand (frozen order §2). Traffic sits
+      // between them (docs/02 §Daily: cohort → traffic → demand): cohort reads traffic's
+      // over-commute share from YESTERDAY (1-day lag), traffic consumes the fresh chunk snapshot.
+      this.cohort.recompute(this.economy.tax.r, this.traffic.overCommuteShare());
+      this.traffic.recompute(); // T-403: zero → assign flows → v/c → LOS; BPR feeds tomorrow
       // Demand recomputes AT THE END of the growth stage (post completion + move-in);
       // see the T-206 stub ledger in demand.ts for why (doc smoothing cut → §9 ask-first).
       this.demand.recompute();
@@ -91,9 +132,11 @@ export class Sim {
     // docs/02 §4 bankruptcy contract: below the limit only free commands may proceed
     // (all current command kinds are paid; the blocking reason feeds the banned-commands modal).
     if (this.economy.isBankrupt()) return { ok: false, reason: 'bankrupt' };
+    const isPlant = (x: number, y: number): boolean => this.power.isPlant(x, y);
+    const isTower = (x: number, y: number): boolean => this.water.isTower(x, y);
     let res: CommandResult;
     if (cmd.kind === 'place-road') {
-      const v = validateRoad(this.world, this.economy, cmd.path);
+      const v = validateRoad(this.world, this.economy, cmd.path, isPlant, isTower);
       if (!v.ok || !v.plan) res = v;
       else {
         for (const t of v.plan.newTiles) this.buildings.demolishAt(t.x, t.y); // road clears buildings
@@ -106,10 +149,11 @@ export class Sim {
           if (t.y < y0) y0 = t.y; if (t.y > y1) y1 = t.y;
         }
         if (x1 >= x0) this.roadAccess.noteRect({ x0, y0, x1, y1 }); // attachment may change around new road
+        if (x1 >= x0) { this.roadGraph.noteRect({ x0, y0, x1, y1 }); this.roadGraph.flush(); this.pathfinder.flushCache(); } // T-401 structural rebuild · T-402 paths re-derive
         this.emitChunksFor(cmd.path);
       }
     } else if (cmd.kind === 'paint-zone') {
-      const v = validateZone(this.world, this.economy, cmd.rect);
+      const v = validateZone(this.world, this.economy, cmd.rect, isPlant, isTower);
       if (!v.ok || !v.plan) res = v;
       else {
         const applied = applyZone(this.world, v.plan, cmd.zone);
@@ -118,15 +162,73 @@ export class Sim {
         this.roadAccess.noteRect(cmd.rect, 0); // zone paint changes which tiles need flags
         this.emitChunksForRect(cmd.rect);
       }
+    } else if (cmd.kind === 'place-power-line') {
+      const v = validatePowerLine(this.world, this.economy, cmd.path, isPlant, isTower);
+      if (!v.ok || !v.plan) res = v;
+      else {
+        const applied = applyPowerLine(this.world, v.plan);
+        this.economy.spend(v.cost);
+        res = { ok: true, cost: v.cost, tiles: applied };
+        this.power.recompute(); // immediate truth: icons/snapshot share it before the next tick
+        this.events.push({ type: 'power-line-changed' }); // view resyncs the line projection
+        this.emitChunksFor(cmd.path);
+      }
+    } else if (cmd.kind === 'place-plant') {
+      const v = validatePlant(this.world, this.economy, cmd.x, cmd.y, isPlant, isTower);
+      if (!v.ok) res = v;
+      else {
+        this.buildings.demolishAt(cmd.x, cmd.y); // plant clears buildings (no refund, like roads)
+        this.world.clearZone(cmd.x, cmd.y); // plant clears zone paint (no refund, like roads)
+        this.power.addPlant(cmd.x, cmd.y);
+        this.economy.spend(v.cost);
+        res = { ok: true, cost: v.cost, tiles: 1 };
+        this.power.recompute(); // grid activates immediately (no one-tick dark start)
+        this.events.push({ type: 'plant-changed', x: cmd.x, y: cmd.y, present: true });
+        this.emitChunksFor([{ x: cmd.x, y: cmd.y }]);
+      }
+    } else if (cmd.kind === 'place-tower') {
+      const v = validateTower(this.world, this.economy, cmd.x, cmd.y, isPlant, isTower);
+      if (!v.ok) res = v;
+      else {
+        this.buildings.demolishAt(cmd.x, cmd.y); // tower clears buildings (no refund, like roads)
+        this.world.clearZone(cmd.x, cmd.y); // tower clears zone paint (no refund, like roads)
+        this.water.addTower(cmd.x, cmd.y);
+        this.economy.spend(v.cost);
+        res = { ok: true, cost: v.cost, tiles: 1 };
+        this.water.recompute(); // pressure net activates immediately (no one-tick dry start)
+        this.events.push({ type: 'tower-changed', x: cmd.x, y: cmd.y, present: true });
+        this.emitChunksFor([{ x: cmd.x, y: cmd.y }]);
+      }
     } else {
       const v = validateBulldoze(this.world, this.economy, cmd.rect);
       if (!v.ok || !v.plan) res = v;
       else {
         for (const t of v.plan.tiles) this.buildings.demolishAt(t.x, t.y); // bulldoze demolishes first
+        let removedPlant = false;
+        for (const t of v.plan.tiles) {
+          if (this.power.removePlant(t.x, t.y)) {
+            removedPlant = true;
+            this.events.push({ type: 'plant-changed', x: t.x, y: t.y, present: false });
+          }
+        }
+        let removedTower = false;
+        for (const t of v.plan.tiles) {
+          if (this.water.removeTower(t.x, t.y)) {
+            removedTower = true;
+            this.events.push({ type: 'tower-changed', x: t.x, y: t.y, present: false });
+          }
+        }
+        const hadLines = v.plan.tiles.some(
+          (t) => (this.world.powerLine[this.world.idx(t.x, t.y)] as number) === 1,
+        );
         const applied = applyBulldoze(this.world, v.plan);
         this.economy.spend(v.cost);
+        if (removedPlant || removedTower || hadLines) { this.power.recompute(); this.water.recompute(); } // demolition follows grid truth immediately
         res = { ok: true, cost: v.cost, tiles: applied };
         this.roadAccess.noteRect(cmd.rect); // road loss may de-attach neighbours ±2
+        this.roadGraph.noteRect(cmd.rect); this.roadGraph.flush(); // T-401: road loss rebuilds affected components
+        this.pathfinder.flushCache(); // T-402: cached paths die with their graph
+        if (hadLines) this.events.push({ type: 'power-line-changed' });
         this.emitChunksForRect(cmd.rect);
       }
     }
@@ -174,6 +276,12 @@ export class Sim {
     for (const c of this.roadAccess.drainChanges()) {
       this.events.push({ type: 'road-access-changed', x: c.x, y: c.y, blocked: c.blocked });
     }
+    for (const c of this.power.drainChanges()) {
+      this.events.push({ type: 'power-changed', x: c.x, y: c.y, powered: c.powered });
+    }
+    for (const c of this.water.drainChanges()) {
+      this.events.push({ type: 'water-changed', x: c.x, y: c.y, watered: c.watered });
+    }
     const out = this.events;
     this.events = [];
     return out;
@@ -190,9 +298,10 @@ export class Sim {
         c: Math.round(this.demand.target().c),
         i: Math.round(this.demand.target().i),
       },
-      // T-208: jobs/unemployment 0 per demand.ts's T-305 cohort ledger (visible-but-honest zeros).
-      jobs: 0,
-      unemployment: 0,
+      tax: { r: this.economy.tax.r, c: this.economy.tax.c, i: this.economy.tax.i },
+      // T-208: jobs/unemployment now real via the T-305 cohort ledger (C/I job openings / gravity match).
+      jobs: this.cohort.state().jobs,
+      unemployment: this.cohort.state().unemployment,
       bankrupt: this.economy.isBankrupt(),
       lastMonth: this.economy.lastMonth(),
       history: this.economy.history(),
@@ -201,6 +310,28 @@ export class Sim {
       paused: this.clock.paused,
       speed: this.clock.speed,
       counts: { ...this.world.counts },
+      power: (() => {
+        const s = this.power.netStatus();
+        return {
+          active: this.power.active,
+          plants: this.power.plantCount,
+          nets: s.nets,
+          supplyMw: s.supplyMw,
+          demandMw: s.demandMw,
+          unpowered: s.unpowered,
+        };
+      })(),
+      water: (() => {
+        const t = this.water.netStatus();
+        return {
+          active: this.water.active,
+          towers: this.water.towerCount,
+          nets: t.nets,
+          supplyKl: t.supplyKl,
+          demandKl: t.demandKl,
+          unwatered: t.unpowered,
+        };
+      })(),
     };
   }
 
@@ -227,7 +358,26 @@ export class Sim {
     return this.buildings.serialize();
   }
 
-  loadState(meta: SaveMeta, layers: SaveLayers, entities?: SaveEntities): void {
+  getSavePolicy(): SavePolicy {
+    return { tax: { ...this.economy.tax } };
+  }
+
+  getSavePower(): SavePower {
+    return { plants: this.power.allPlants() };
+  }
+
+  getSaveWater(): SaveWater {
+    return { towers: this.water.allTowers() };
+  }
+
+  loadState(
+    meta: SaveMeta,
+    layers: SaveLayers,
+    entities?: SaveEntities,
+    policy?: SavePolicy,
+    power?: SavePower,
+    water?: SaveWater,
+  ): void {
     if (meta.worldSize !== this.world.size) {
       throw new Error(`save size ${meta.worldSize} != world size ${this.world.size} (resize unsupported)`);
     }
@@ -235,16 +385,38 @@ export class Sim {
     if (entities !== undefined) this.buildings.deserialize(entities);
     else this.buildings.reset(); // pre-T-202 saves carry no entity section → restore empty (repair note)
     this.roadAccess.recomputeForLoad(this.buildings); // derived flags follow the restored layers silently
+    this.roadGraph.rebuildAll(); // T-401: graph is derived; rebuilt canonically from restored road layer
+    this.pathfinder.flushCache(); // T-402: no stale routes span a load
+    // T-405 (v3 save-format): restore persisted plant sites, then rebuild derived power flags.
+    // Absence (pre-v3 save) leaves zero plants; with no lines either the grid stays inactive and
+    // the city runs self-powered (spec §9 legacy-guard — old saves keep growing).
+    this.power.clearPlants();
+    for (const p of power?.plants ?? []) this.power.addPlant(p.x, p.y);
+    this.power.recomputeForLoad();
+    // T-406 (v4 save-format): restore persisted tower sites, then rebuild derived pressure flags.
+    // Absence (pre-v4 save) leaves zero towers; the grid stays inactive and the city runs
+    // self-watered (spec section 9 legacy-guard - old saves keep growing).
+    this.water.clearTowers();
+    for (const t of water?.towers ?? []) this.water.addTower(t.x, t.y);
+    this.water.recomputeForLoad();
     this.fields.invalidateStatic(); // restored terrain bytes → rebuild static base
     this.fields.recompute(); // land value is derived; rebuilt from restored world+buildings
-    // Demand is derived too, but growth reads it BEFORE the daily recompute (frozen order), so a
-    // stale bootstrap vector here would make the first post-load day diverge from an uninterrupted
-    // run (and show wrong RCI bars until then). Rebuild it from the restored city now.
-    this.demand.recompute();
     const speed = meta.speed === 0 || meta.speed === 1 || meta.speed === 2 || meta.speed === 3 ? meta.speed : 1;
     this.clock.setState({ tick: meta.tick, accumulator: meta.accumulator, speed });
     this.economy.balance = meta.balance;
     this.rng.setState({ seed: meta.rngSeed, state: meta.rngState });
+    // T-302 (v2 save-format): restore persisted per-zone tax rates. setTax clamps, so a corrupted
+    // rate is repaired rather than trusted; absence (pre-v2 save) leaves the 9/9/9 default.
+    if (policy) {
+      this.economy.setTax('r', policy.tax.r);
+      this.economy.setTax('c', policy.tax.c);
+      this.economy.setTax('i', policy.tax.i);
+    }
+    // Derived recompute (post-load): cohort → demand, both read restored buildings + restored tax so
+    // the first post-load day matches an uninterrupted run (and RCI bars are correct immediately).
+    this.cohort.recompute(this.economy.tax.r, this.traffic.overCommuteShare());
+    this.traffic.recompute(); // T-403: volumes re-derive from restored buildings immediately
+    this.demand.recompute();
     this.events.push({ type: 'treasury-changed', balance: this.economy.balance });
   }
 
@@ -262,6 +434,8 @@ export class Sim {
     let h = fnv1aBytes(head);
     for (const part of this.world.hashParts()) h = fnv1aBytes(part, h);
     h = this.buildings.hashInto(h);
+    h = this.power.hashInto(h); // T-405: plant sites are sim state (flags derive from them)
+    h = this.water.hashInto(h); // T-406: tower sites are sim state (pressure flags derive from them)
     return h >>> 0;
   }
 }

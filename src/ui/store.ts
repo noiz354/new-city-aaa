@@ -18,6 +18,14 @@ export interface UiState {
   storageDriver: string;
   /** T-207: land-value gradient overlay visible? (toggles via TopBar / V key) */
   valueOverlay: boolean;
+  /** T-405: power-grid overlay visible? (toggles via TopBar / P key) */
+  powerOverlay: boolean;
+  /** T-406: water-pressure overlay visible? (toggles via TopBar / W key) */
+  waterOverlay: boolean;
+  /** T-403: traffic LOS overlay visible? (toggles via TopBar / T key) */
+  trafficOverlay: boolean;
+  /** T-403: congestion alert badge text (LOS E/F corridors), null when clear. */
+  trafficAlert: string | null;
   /** T-303: budget panel open (breakdown + 12-month sparkline). */
   budgetOpen: boolean;
 }
@@ -41,6 +49,10 @@ export class UiStore {
       projection: 'ortho',
       storageDriver: '?',
       valueOverlay: false,
+      powerOverlay: false,
+      waterOverlay: false,
+      trafficOverlay: false,
+      trafficAlert: null,
       budgetOpen: false,
     };
   }

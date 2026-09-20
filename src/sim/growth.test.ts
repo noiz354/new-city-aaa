@@ -25,20 +25,18 @@ describe('Growth v0: daily scoring → spawn (UJ-01 sim path)', () => {
     expect(sim.buildings.count).toBeGreaterThanOrEqual(1);
   });
 
-  it('spawns at most one building per day (pacing cap)', () => {
+  it('spawns at most the daily budget N (docs §3: N=2 at pop 0), pacing city growth', () => {
     const sim = buildRTown();
     runDays(sim, 1);
-    expect(sim.buildings.count).toBe(1);
+    expect(sim.buildings.count).toBe(2); // N = clamp(2 + pop/500, 2, 25) = 2 at pop 0
     runDays(sim, 1);
-    expect(sim.buildings.count).toBe(2);
-    runDays(sim, 2);
-    expect(sim.buildings.count).toBe(4); // all lots filled after 4 days, never faster
+    expect(sim.buildings.count).toBe(4); // remaining 2 lots, still N=2/day (pop 0 while constructing)
   });
 
   it('population stays zero while everything is still under construction', () => {
     const sim = buildRTown();
-    runDays(sim, 1); // spawned day 1, completes day 4
-    expect(sim.buildings.count).toBe(1);
+    runDays(sim, 1); // spawned 2 (budget N=2), both complete day 4
+    expect(sim.buildings.count).toBe(2);
     expect(sim.buildings.stateAt(10, 9)).toBe(BUILDING_CONSTRUCTION);
     expect(sim.snapshot().population).toBe(0);
   });
@@ -72,13 +70,13 @@ describe('Growth v0: daily scoring → spawn (UJ-01 sim path)', () => {
     expect(sim.buildings.count).toBe(0); // barren while disconnected
     sim.execute({ kind: 'place-road', path: [{ x: 10, y: 10 }, { x: 11, y: 10 }] });
     runDays(sim, 1);
-    expect(sim.buildings.count).toBe(1); // the day after access exists, scoring picks it
+    expect(sim.buildings.count).toBe(2); // budget N=2 picks both eligible lots the day access exists
   });
 
   it('bulldozing the only road cancels the in-flight build and stops growth (design-doc §2)', () => {
     const sim = buildRTown();
     runDays(sim, 1);
-    expect(sim.buildings.count).toBe(1);
+    expect(sim.buildings.count).toBe(2); // budget N=2/day
     const r = sim.execute({ kind: 'bulldoze', rect: { x0: 10, y0: 10, x1: 13, y1: 10 } });
     if (!r.ok) throw new Error(r.reason);
     runDays(sim, 5);
@@ -106,11 +104,11 @@ describe('Growth v0: daily scoring → spawn (UJ-01 sim path)', () => {
     sim.drainEvents(); // flush setup commands
     runDays(sim, 1);
     const spawned = sim.drainEvents().filter((e) => e.type === 'building-changed' && e.state === 1);
-    expect(spawned.length).toBe(1);
+    expect(spawned.length).toBe(2); // budget N=2/day at pop 0
     expect(spawned[0]).toMatchObject({ x: 10, y: 9 }); // first eligible lot in scan order
-    runDays(sim, 3); // completes after 3 construction days
+    runDays(sim, 3); // the two day-1 builds complete after 3 construction days
     const occupied = sim.drainEvents().filter((e) => e.type === 'building-changed' && e.state === 2);
-    expect(occupied.length).toBe(1);
+    expect(occupied.length).toBe(2); // both day-1 builds move in
     expect(sim.drainEvents()).toEqual([]); // queue stays bounded between frames
   });
 });

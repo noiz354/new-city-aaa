@@ -41,6 +41,8 @@ export function Inspector({
     const reason = actions.growthBlockReason(tile.x, tile.y);
     if (reason === 'no-road-access') rows.push(['Growth blocked', actions.roadAccessReason()]);
     else if (reason === 'no-demand') rows.push(['Growth blocked', 'No demand yet']);
+    else if (reason === 'no-power') rows.push(['Growth blocked', actions.powerReason()]);
+    else if (reason === 'no-water') rows.push(['Growth blocked', actions.waterReason()]);
   }
   return (
     <div className="inspector panel">
